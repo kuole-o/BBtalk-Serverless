@@ -4,7 +4,7 @@ const COS = require('cos-nodejs-sdk-v5');
 
 const TopDomain = process.env.TopDomain; //顶级域名，如 media.guole.fun 中的 "fun"
 const SecondLevelDomain = process.env.SecondLevelDomain; //二级域名，如 media.guole.fun 中的 "guole"
-const SubDomain = process.env.SubDomain; //主子域，如 media.guole.fun 中的 "media"
+const SubDomain = process.env.SubDomain; //子域，如 media.guole.fun 中的 "media"
 
 const Tcb_Bucket = process.env.Tcb_Bucket;
 const Tcb_Region = process.env.Tcb_Region;
