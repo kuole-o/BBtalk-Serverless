@@ -10,7 +10,7 @@ const token = process.env.WeChat_Token;
 const encodingAesKey = process.env.WeChat_encodingAesKey;
 const appId = process.env.WeChat_appId; //微信公众平台 appId
 const appSecret = process.env.WeChat_appSecret; //微信公众平台 appSecret
-const upload_Image_Method = process.env.upload_Image_Method; // 导入上传图片的方式，环境变量配置可选值：cos - 腾讯云存储桶；qubu - 去不图床
+const upload_Media_Method = process.env.upload_Media_Method; // 导入上传媒体的方式，环境变量配置可选值：cos - 腾讯云存储桶；qubu - 去不图床；使用发视频功能，必须选择 cos 方式；
 
 async function handleGetRequest(event) {
     const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod } = event;
@@ -185,12 +185,12 @@ async function handlePostRequest(event, lastMsgId) {
                     fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
                     mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
                     await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-                    if (mediaUrl && mediaId && upload_Image_Method === 'cos') {
+                    if (mediaUrl && mediaId && upload_Media_Method === 'cos') {
                         cosPath = '/img/bb-img/';
                         imgURL = await tools.uploadMediaToCos(Tcb_Bucket, mediaId, Tcb_Region, cosPath, fileSuffix);
                         text = `<img src="${imgURL}">`;
                         replyMsg = await newbbTalk(text, MsgType);
-                    } else if (mediaUrl && mediaId && upload_Image_Method === 'qubu') {
+                    } else if (mediaUrl && mediaId && upload_Media_Method === 'qubu') {
                         imgURL = await tools.uploadImageQubu(mediaId, fileSuffix);
                         text = `<img src="${imgURL}">`;
                         replyMsg = await newbbTalk(text, MsgType);
@@ -221,7 +221,7 @@ async function handlePostRequest(event, lastMsgId) {
             //             // 下载文件并转换为 MP3 格式
             //             await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
             //             console.log('[INFO] 音频文件已成功转换为 MP3 格式并保存到指定路径！');
-            //             if (mediaUrl && mediaId && upload_Image_Method === 'cos') {
+            //             if (mediaUrl && mediaId && upload_Media_Method === 'cos') {
             //                 cosPath = '/media/bb-media/';
             //                 const voiceUrl = await tools.uploadMediaToCos(Tcb_Bucket, mediaId, Tcb_Region, cosPath, fileSuffix);
             //                 replyMsg = await newbbTalk(voiceUrl, MsgType);
@@ -253,7 +253,7 @@ async function handlePostRequest(event, lastMsgId) {
                     fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
                     mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
                     await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-                    if (mediaUrl && mediaId && upload_Image_Method === 'cos') {
+                    if (mediaUrl && mediaId && upload_Media_Method === 'cos') {
                         cosPath = '/media/bb-media/';
                         videoUrl = await tools.uploadMediaToCos(Tcb_Bucket, mediaId, Tcb_Region, cosPath, fileSuffix);
                         text = `<video src="${videoUrl}" controls></video>`;
