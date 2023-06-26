@@ -111,8 +111,8 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                     if (params > PageSize) {
                         pageNum = Math.floor(params / PageSize) + 1;
                     }
-                    console.log('[INFO] 当前匹配到的 params 为：' + params)
-                    console.log('[INFO] 当前计算的 pageNum 为：' + pageNum)
+                    console.log('[INFO] 1012 当前匹配到的 params 为：' + params)
+                    console.log('[INFO] 1013 当前计算的 pageNum 为：' + pageNum)
                     switch (true) {
                         case command.includes('/h'):
                             command = '/h';
@@ -171,14 +171,7 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                     result = await tools.getUserConfig(FromUserName);
                     if (result && result.get('isBinding')) {
                         replyMsg = await newbbTalk(Content, MsgType);
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else {
                         // 未绑定用户，回复绑定指令
                         replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
@@ -206,26 +199,12 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                         imgURL = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_ImagePath, mediaId, fileSuffix);
                         text = `<img src="${imgURL}">`;
                         replyMsg = await newbbTalk(text, MsgType);
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else if (mediaUrl && mediaId && Upload_Media_Method === 'qubu') {
                         imgURL = await tools.uploadImageQubu(mediaId, fileSuffix);
                         text = `<img src="${imgURL}">`;
                         replyMsg = await newbbTalk(text, MsgType);
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else {
                         replyMsg = '云函数上传图片方式配置有误！可选 cos - 腾讯云存储桶；qubu - 去不图床';
                     }
@@ -256,13 +235,7 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
             //             if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
             //                 const voiceUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
             //                 replyMsg = await newbbTalk(voiceUrl, MsgType);
-            //                 tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-            //                 .then(() => {
-            //                 //根据需要再次通知客户端
-            //                 })
-            //                 .catch((err) => {
-            //                 console.error(err);
-            //                 });
+            //                 await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
             //             } else {
             //                 replyMsg = '云函数上传方式配置有误！音频消息仅支持上传方式为 cos 时处理';
             //             }
@@ -271,7 +244,7 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
             //         }
             //     } else {
             //         replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-            //         console.log('[INFO] 1005 回复以下命令绑定用户')
+            //         console.log('[INFO] 1006 回复以下命令绑定用户')
             //     }
             // } catch (err) {
             //     console.error(err);
@@ -295,20 +268,13 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                         videoUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
                         text = `<video src="${videoUrl}" controls></video>`;
                         replyMsg = await newbbTalk(text, MsgType);
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else {
                         replyMsg = '云函数上传方式配置有误！视频消息仅支持上传方式为 cos 时处理';
                     }
                 } else {
                     replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1005 回复以下命令绑定用户')
+                    console.log('[INFO] 1007 回复以下命令绑定用户')
                 }
             } catch (err) {
                 console.error(err);
@@ -327,17 +293,10 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                     console.log(script)
                     dom = dom.replace(/\s+/g, ' ').trim();
                     replyMsg = await newbbTalk(dom, MsgType, script);
-                    tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                        .then(() => {
-                            // queryContentByPage 成功后
-                            console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                        })
-                        .catch((err) => {
-                            console.error(err);
-                        });
+                    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                 } else {
                     replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1005 回复以下命令绑定用户')
+                    console.log('[INFO] 1008 回复以下命令绑定用户')
                 }
             } catch (err) {
                 console.error(err);
@@ -363,17 +322,10 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                             `;
                     text = text.replace(/\s+/g, ' ').trim();
                     replyMsg = await newbbTalk(text, MsgType);
-                    tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                        .then(() => {
-                            // queryContentByPage 成功后
-                            console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                        })
-                        .catch((err) => {
-                            console.error(err);
-                        });
+                    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                 } else {
                     replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1005 回复以下命令绑定用户')
+                    console.log('[INFO] 1009 回复以下命令绑定用户')
                 }
             } catch (err) {
                 console.error(err);

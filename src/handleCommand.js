@@ -28,8 +28,8 @@ async function handleCommand(command, params, Content, FromUserName) {
         pageNum = Math.floor(params / PageSize) + 1;
     }
     let limit, content, other, bbList, newContent, results, query, result, match, matches, object, userConfig, List, order, inputContent, updateContent;
-    console.log('[INFO] 当前匹配到的 params 为：' + params)
-    console.log('[INFO] 当前计算的 pageNum 为：' + pageNum)
+    console.log('[INFO] 1010 当前匹配到的 params 为：' + params)
+    console.log('[INFO] 1011 当前计算的 pageNum 为：' + pageNum)
     switch (true) {
         case command === '/h':
             replyMsg = '「哔哔秘笈」\n==================\n/l 查询最近 10 条哔哔\n/l 数字 - 查询最近前几条，如 /l3\n---------------\n/a 文字 - 最新一条原内容后追加文字\n/a 数字 文字 - 第几条原内容后追加文字，如 /a3 开心！\n---------------\n/f 文字 - 最新一条原内容前插入文字\n/f 数字 文字 - 第几条原内容前插入文字，如 /f3 开心！\n---------------\n/s 关键词 - 搜索内容\n---------------\n/d 数字 - 删除第几条，如 /d2\n---------------\n/e 文字 - 编辑替换第 1 条\n/e 数字 文字 - 编辑替换第几条，如 /e2 新内容\n---------------\n/nobber - 解除绑定';
@@ -173,14 +173,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                                 }
                             });
                         }
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                         replyMsg = '删除成功';
                     } else {
                         replyMsg = '无效的序号';
@@ -198,10 +191,10 @@ async function handleCommand(command, params, Content, FromUserName) {
             }
             break;
         case command === '/a' || command === '/f':
-            matches = Content.match(/^\/([af])\s*(\d*)\s*(.*)$/);
+            matches = Content.match(/^\/([af]\d*)\s*(.*)$/);
             if (Array.isArray(matches) && matches.length > 1) {
-                index = matches[2] ? parseInt(matches[2]) : 1;
-                inputContent = matches[3].trim();
+                index = params || 1;
+                inputContent = matches[2].trim();
             }
             console.log('[INFO] index 内容为：' + index)
             console.log('[INFO] inputContent 内容为：' + inputContent)
@@ -217,14 +210,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                         newContent = command === '/a' ? content + inputContent : inputContent + content;
                         object.set('content', newContent);
                         await object.save();
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize)
                         let forward_back = '追加';
                         if (command === '/a') {
                             newContent = content + inputContent;
@@ -269,14 +255,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                         object = results[index];
                         object.set('content', newContent);
                         await object.save();
-                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize)
-                            .then(() => {
-                                // queryContentByPage 成功后
-                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
-                            })
-                            .catch((err) => {
-                                console.error(err);
-                            });
+                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize)
                         replyMsg = '修改成功';
                     } else {
                         replyMsg = '无效的序号';

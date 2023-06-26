@@ -11,10 +11,12 @@ const Tcb_SecretKey = process.env.Tcb_SecretKey;
 const TopDomain = process.env.TopDomain; //顶级域名，如 media.guole.fun 中的 "fun"
 const SecondLevelDomain = process.env.SecondLevelDomain; //二级域名，如 media.guole.fun 中的 "guole"
 const SubDomain = process.env.SubDomain; //主子域，如 media.guole.fun 中的 "media"
+COS.prototype.log = console.log.bind(console);
 
 const TcbCOS = new COS({
   SecretId: Tcb_SecretId,
   SecretKey: Tcb_SecretKey,
+  LogLevel: 'debug' // 设置日志级别为 DEBUG、INFO、WARN、ERROR 和 NONE
 });
 
 var access_token = ''
@@ -347,61 +349,129 @@ function gaodeMap(zoom,alt,altLan,altLat){
  * @param {number} pageNum - 指定页数，从1开始
  * @param {number} pageSize - 每页条数
  * @param {boolean} isRecursive - 是否递归获取后续页数的数据
- * @returns {Promise<object>} - 返回一个Promise对象，resolve时返回指定格式的JSON数据
+ * @returns {Promise<void>} - 返回一个Promise对象，resolve时表示所有JSON文件上传成功
  */
 async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, isRecursive = false) {
+  console.log('[INFO] 已进入 queryContent 方法！')
   const query = new AV.Query('content');
   query.descending('createdAt');
-  query.skip((pageNum - 1) * pageSize);
-  query.limit(pageSize);
 
-  const [results, count] = await Promise.all([query.find(), query.count()]);
+  let results = [];
+  let count = 0;
+  let skip = ((pageNum - 1) * pageSize);
 
-  const formattedResults = results.map(result => {
-    const formattedResult = {};
-    formattedResult.MsgType = result.get('MsgType');
-    formattedResult.content = result.get('content');
-    formattedResult.other = result.get('other');
-    formattedResult.from = result.get('from');
-    formattedResult.createdAt = result.get('createdAt');
-    formattedResult.updatedAt = result.get('updatedAt');
-    formattedResult.objectId = result.id;
-    return formattedResult;
-  });
+  console.log('[INFO] 开始查询 LeanCloud 数据...')
+  query.skip(skip);
+  query.limit(pageSize); 
+  const [data, num] = await Promise.all([query.find(), query.count()]);
+  results.push(...data);
+  count += num;
+  skip += data.length;
 
-  const formattedData = {
-    results: formattedResults,
-    count: count,
-  };
+  console.log('[INFO] 查询 LeanCloud 数据完成！')
+  console.log('[INFO] 共查询到 ' + count + ' 条数据！')
 
-  const fileName = `bbtalk_page=${pageNum}.json`;
+  const pageCount = Math.ceil(count / pageSize); // 总页数
+  console.log('[INFO] 分页查询，共 ' + pageCount + ' 页！')
 
-  const params = {
-    Bucket: bucket,
-    Region: region,
-    Key: `${cosPath}/${fileName}`,
-    Body: JSON.stringify(formattedData),
-    'x-cos-copy-source': `${cosPath}/${fileName}`, // 要覆盖的文件路径
-  };
-
-  await new Promise((resolve, reject) => {
-    TcbCOS.putObject(params, (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-
-  // 如果当前返回的条数 < pageSize，说明没有下一页数据了，停止任务，跳出循环
-  if (results.length < pageSize) {
-    return formattedData;
-  } else if (isRecursive) {
-    return queryContentByPage(bucket, region, cosPath, pageNum + 1, pageSize, isRecursive);
+  const promises = [];
+  const shouldUpdateAll = (pageNum === 1 && isRecursive) || (pageNum > 1 && isRecursive && count % pageSize === 1);
+  console.log('[INFO] 当前 shouldUpdateAll 为：' + shouldUpdateAll)
+  if (shouldUpdateAll) {
+    console.log('[INFO] 开始递归查询 LeanCloud 数据...')
+    query.limit(1000); // 一次最多查询 1000 条数据
+    while (data.length === 1000) {
+      query.skip(skip);
+      const [subData, subNum] = await Promise.all([query.find(), query.count()]);
+      results.push(...subData);
+      count += subNum;
+      skip += subData.length;
+      data.length = subData.length;
+    }
+    console.log('[INFO] 递归查询 LeanCloud 数据完成！')
+    console.log('[INFO] 共查询到 ' + count + ' 条数据！')
+    console.log('[INFO] 重新生成所有 JSON 文件...')
+    for (let i = 1; i <= pageCount; i++) {
+      const startIndex = (i - 1) * pageSize;
+      const endIndex = Math.min(i * pageSize, count);
+      const subResults = results.slice(startIndex, endIndex);
+      const formattedResults = subResults.map(result => {
+        const formattedResult = {};
+        formattedResult.MsgType = result.get('MsgType');
+        formattedResult.content = result.get('content');
+        formattedResult.other = result.get('other');
+        formattedResult.from = result.get('from');
+        formattedResult.createdAt = result.get('createdAt');
+        formattedResult.updatedAt = result.get('updatedAt');
+        formattedResult.objectId = result.id;
+        return formattedResult;
+      });
+      const formattedData = {
+        results: formattedResults,
+        count: count,
+      };
+      const fileName = `bbtalk_page=${i}.json`;
+      console.log('[INFO] 生成 JSON 文件：' + fileName);
+      const params = {
+        Bucket: bucket,
+        Region: region,
+        Key: `${cosPath}/${fileName}`,
+        Body: JSON.stringify(formattedData),
+      };
+      promises.push(new Promise((resolve, reject) => {
+        TcbCOS.putObject(params, (err, data) => {
+          if (err) {
+            reject(err);
+          } else {
+            console.log('[INFO] 上传 JSON 文件成功：' + fileName);
+            console.log(data);
+            resolve();
+          }
+        });
+      }));
+    }
   } else {
-    return formattedData;
+    console.log('[INFO] 生成 JSON 文件：' + `bbtalk_page=${pageNum}.json`);
+    const startIndex = (pageNum - 1) * pageSize;
+    const endIndex = Math.min(pageNum * pageSize, count);
+    const subResults = results.slice(startIndex, endIndex);
+    const formattedResults = subResults.map(result => {
+      const formattedResult = {};
+      formattedResult.MsgType = result.get('MsgType');
+      formattedResult.content = result.get('content');
+      formattedResult.other = result.get('other');
+      formattedResult.from = result.get('from');
+      formattedResult.createdAt = result.get('createdAt');
+      formattedResult.updatedAt = result.get('updatedAt');
+      formattedResult.objectId = result.id;
+      return formattedResult;
+    });
+    const formattedData = {
+      results: formattedResults,
+      count: count,
+    };
+    const fileName = `bbtalk_page=${pageNum}.json`;
+    const params = {
+      Bucket: bucket,
+      Region: region,
+      Key: `${cosPath}/${fileName}`,
+      Body: JSON.stringify(formattedData),
+    };
+    promises.push(new Promise((resolve, reject) => {
+      TcbCOS.putObject(params, (err, data) => {
+        if (err) {
+          reject(err);
+        } else {
+          console.log('[INFO] 上传 JSON 文件成功：' + fileName);
+          console.log(data);
+          resolve();
+        }
+      });
+    }));
   }
+
+  await Promise.all(promises);
+  console.log('[INFO] 所有 JSON 文件上传成功！');
 }
 
 function sliceByByte(str, maxLength) {
