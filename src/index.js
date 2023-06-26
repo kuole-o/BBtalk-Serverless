@@ -19,6 +19,7 @@ exports.main_handler = async (event, context, callback) => {
     const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod, MsgId } = event;
     let content_text, response;
 
+    var pageNum = 1;
     var lastMsgId = null; // 全局变量，标识是否已处理请求
     // 处理微信验证请求
     if (httpMethod === 'GET' && queryString) {
@@ -39,14 +40,13 @@ exports.main_handler = async (event, context, callback) => {
     // 处理微信发来的消息
     if (httpMethod === 'POST' && body) {
         try {
-            content_text = await handlePostRequest(event, lastMsgId);
+            content_text = await handlePostRequest(event, lastMsgId, pageNum);
             response = {
                 "isBase64Encoded": false,
                 "statusCode": 200,
                 "headers": { "Content-Type": "text/plain" },
                 "body": content_text
             }
-            lastMsgId = MsgId;
             return response
         } catch (err) {
             console.error(err)

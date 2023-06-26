@@ -6,6 +6,20 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
 * license: Apache-2.0
 * https://github.com/kuole-o/BBtalk-Serverless/main/LICENSE
   
+## 更新日志
+  
+<details>
+<summary>v1.0.1</summary>
+  * 新增回复内容超长，自动截断逻辑，避免微信异常响应 <br>  
+  * 抽离多个环境变量，详见使用指引 <br>  
+  * 新增说说内容转储为 json，上传 cos 功能，前端直接请求这个 json ，通过腾讯云 CDN 加速，提升访问速度，详见使用指引 <br>  
+</details>
+
+<details>
+<summary>v1.0.0</summary>
+  * 首版本 <br>
+</details>
+  
 ## 特性
   
 * 包含
@@ -41,11 +55,6 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
     ---------------
     /nobber - 解除绑定
 ```
-
-<details>
-<summary>更新日志 v1.0.0</summary>
-  * 首版本 <br>
-</details>
   
 ## [演示页面](https://blog.guole.fun/bb/)  
   

@@ -205,8 +205,15 @@ async function downloadMediaToTmp(mediaUrl, mediaId, fileSuffix) {
   }
 }
 
-// 上传图片文件到腾讯云cos的指定存储桶的指定路径下
-async function uploadMediaToCos(bucket, mediaId, region, cosPath, fileSuffix) {
+/**
+ * 上传文件到腾讯云 cos 的指定存储桶的指定路径下
+ * @param {string} bucket - 腾讯云存储桶名称
+ * @param {string} region - 存储桶所在地域
+ * @param {string} cosPath - 存储桶中存储文件的路径
+ * @param {string} mediaId - 微信临时素材接口中的唯一标识
+ * @param {string} fileSuffix - 微信临时素材的扩展名后缀
+ */
+async function uploadMediaToCos(bucket, region, cosPath, mediaId, fileSuffix) {
   return new Promise((resolve, reject) => {
     const fileStream = fs.createReadStream('/tmp/' + mediaId + '.' + fileSuffix);
     const fileName = new Date().getTime() + '.' + fileSuffix;
@@ -300,6 +307,14 @@ function deleteFolderRecursive(url) {
   }
 };
 
+/**
+ * 生成高德地图
+ * @param {string} zoom 地图缩放大小，正整数
+ * @param {string} alt 字符串，微信传输的位置信息名称，将以悬浮提示样式展示在地图上
+ * @param {string} altLan 经度
+ * @param {string} altLat 纬度
+ * @returns {Object} 返回一个对象，包含 dom 和 script 两个属性，分别为生成的 HTML 和 JavaScript 代码
+ */
 function gaodeMap(zoom,alt,altLan,altLat){
   let mapWidth = '100%';
   let mapHeight = '360px';
@@ -323,6 +338,86 @@ function gaodeMap(zoom,alt,altLan,altLat){
   return { dom, script };
 };
 
+/**
+ * 获取 LeanCloud 数据转换成 json 格式上传到腾讯云 COS，以便使用 CDN 提升哔哔闪念加载速度
+ * 分页查询指定页数和每页条数的数据，并将查询结果转换成指定格式的 JSON 数据
+ * @param {string} bucket - 腾讯云存储桶名称
+ * @param {string} region - 存储桶所在地域
+ * @param {string} cosPath - 存储桶中存储 JSON 文件的路径
+ * @param {number} pageNum - 指定页数，从1开始
+ * @param {number} pageSize - 每页条数
+ * @param {boolean} isRecursive - 是否递归获取后续页数的数据
+ * @returns {Promise<object>} - 返回一个Promise对象，resolve时返回指定格式的JSON数据
+ */
+async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, isRecursive = false) {
+  const query = new AV.Query('content');
+  query.descending('createdAt');
+  query.skip((pageNum - 1) * pageSize);
+  query.limit(pageSize);
+
+  const [results, count] = await Promise.all([query.find(), query.count()]);
+
+  const formattedResults = results.map(result => {
+    const formattedResult = {};
+    formattedResult.MsgType = result.get('MsgType');
+    formattedResult.content = result.get('content');
+    formattedResult.other = result.get('other');
+    formattedResult.from = result.get('from');
+    formattedResult.createdAt = result.get('createdAt');
+    formattedResult.updatedAt = result.get('updatedAt');
+    formattedResult.objectId = result.id;
+    return formattedResult;
+  });
+
+  const formattedData = {
+    results: formattedResults,
+    count: count,
+  };
+
+  const fileName = `bbtalk_page=${pageNum}.json`;
+
+  const params = {
+    Bucket: bucket,
+    Region: region,
+    Key: `${cosPath}/${fileName}`,
+    Body: JSON.stringify(formattedData),
+    'x-cos-copy-source': `${cosPath}/${fileName}`, // 要覆盖的文件路径
+  };
+
+  await new Promise((resolve, reject) => {
+    TcbCOS.putObject(params, (err, data) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+
+  // 如果当前返回的条数 < pageSize，说明没有下一页数据了，停止任务，跳出循环
+  if (results.length < pageSize) {
+    return formattedData;
+  } else if (isRecursive) {
+    return queryContentByPage(bucket, region, cosPath, pageNum + 1, pageSize, isRecursive);
+  } else {
+    return formattedData;
+  }
+}
+
+function sliceByByte(str, maxLength) {
+  const buf = Buffer.from(str);
+  if (buf.length <= maxLength) {
+    return str;
+  }
+  let slicePos = maxLength;
+  while (slicePos > 0 && (buf[slicePos] & 0xc0) === 0x80) {
+    slicePos--;
+  }
+  const newBuf = Buffer.alloc(slicePos);
+  buf.copy(newBuf, 0, 0, slicePos);
+  return newBuf.toString();
+}
+
 module.exports = {
   access_token,
   token_expire_time,
@@ -337,5 +432,7 @@ module.exports = {
   uploadMediaToCos,
   uploadImageQubu,
   deleteFolderRecursive,
-  gaodeMap
+  gaodeMap,
+  queryContentByPage,
+  sliceByByte
 };

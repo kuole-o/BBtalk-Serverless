@@ -3,14 +3,19 @@ const crypto = require('crypto');
 const tools = require('./tools'); // 引入工具类方法
 const { handleCommand, newbbTalk } = require('./handleCommand'); // 引入处理指令的逻辑
 
+const PageSize = process.env.PageSize || 10;
 const Tcb_Bucket = process.env.Tcb_Bucket;
 const Tcb_Region = process.env.Tcb_Region;
+
+const Tcb_JsonPath = process.env.Tcb_JsonPath;
+const Tcb_ImagePath = process.env.Tcb_ImagePath;
+const Tcb_MediaPath = process.env.Tcb_MediaPath;
 
 const token = process.env.WeChat_Token;
 const encodingAesKey = process.env.WeChat_encodingAesKey;
 const appId = process.env.WeChat_appId; //微信公众平台 appId
 const appSecret = process.env.WeChat_appSecret; //微信公众平台 appSecret
-const upload_Media_Method = process.env.upload_Media_Method; // 导入上传媒体的方式，环境变量配置可选值：cos - 腾讯云存储桶；qubu - 去不图床；使用发视频功能，必须选择 cos 方式；
+const Upload_Media_Method = process.env.Upload_Media_Method || 'cos'; // 导入上传媒体的方式，环境变量配置可选值：cos - 腾讯云存储桶；qubu - 去不图床；使用发视频功能，必须选择 cos 方式；
 
 async function handleGetRequest(event) {
     const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod } = event;
@@ -51,7 +56,7 @@ async function handleGetRequest(event) {
     }
 }
 
-async function handlePostRequest(event, lastMsgId) {
+async function handlePostRequest(event, lastMsgId, pageNum) {
     const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod } = event;
     //console.log('[INFO] 请求 event 为：')
     //console.log(event)
@@ -83,16 +88,16 @@ async function handlePostRequest(event, lastMsgId) {
     if (MsgId == lastMsgId) {
         replyMsg = 'success';
     } else {
-        let startsWithSlash, match;
+        let startsWithSlash, matchCommand;
         if (Content !== undefined) {
             startsWithSlash = Content.match(/^\/.*/);
-            match = Content.match(/^\/[a-z]+\s*(\d+)?|\/b\s*bb,/i);
+            matchCommand = Content.match(/^\/[a-z]+\s*(\d+)?|\/b\s*bb,/i);
         } else {
             startsWithSlash = '';
-            match = '';
+            matchCommand = '';
         }
         const isCommandRegex = /^\/.*/;
-        let result, wechat_access_token, fileSuffix, cosPath, videoUrl, text, mediaUrl;
+        let result, wechat_access_token, fileSuffix, videoUrl, text, mediaUrl;
         const mediaId = MediaId;
         if (MsgType === 'text') {
             try {
@@ -100,10 +105,14 @@ async function handlePostRequest(event, lastMsgId) {
                 if (startsWithSlash) {
                     let command = '';
                     let params = (Content.match(/^\/[a-z]\s*(\d+)?$/i) || [])[1] || '';
-                    console.log('[INFO] 当前匹配到的 params 为：' + params)
-                    if (match) {
-                        command = match[0] || '';
+                    if (matchCommand) {
+                        command = matchCommand[0] || '';
                     }
+                    if (params > PageSize) {
+                        pageNum = Math.floor(params / PageSize) + 1;
+                    }
+                    console.log('[INFO] 当前匹配到的 params 为：' + params)
+                    console.log('[INFO] 当前计算的 pageNum 为：' + pageNum)
                     switch (true) {
                         case command.includes('/h'):
                             command = '/h';
@@ -162,6 +171,14 @@ async function handlePostRequest(event, lastMsgId) {
                     result = await tools.getUserConfig(FromUserName);
                     if (result && result.get('isBinding')) {
                         replyMsg = await newbbTalk(Content, MsgType);
+                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+                            .then(() => {
+                                // queryContentByPage 成功后
+                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
+                            })
+                            .catch((err) => {
+                                console.error(err);
+                            });
                     } else {
                         // 未绑定用户，回复绑定指令
                         replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
@@ -185,15 +202,30 @@ async function handlePostRequest(event, lastMsgId) {
                     fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
                     mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
                     await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-                    if (mediaUrl && mediaId && upload_Media_Method === 'cos') {
-                        cosPath = '/img/bb-img/';
-                        imgURL = await tools.uploadMediaToCos(Tcb_Bucket, mediaId, Tcb_Region, cosPath, fileSuffix);
+                    if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
+                        imgURL = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_ImagePath, mediaId, fileSuffix);
                         text = `<img src="${imgURL}">`;
                         replyMsg = await newbbTalk(text, MsgType);
-                    } else if (mediaUrl && mediaId && upload_Media_Method === 'qubu') {
+                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+                            .then(() => {
+                                // queryContentByPage 成功后
+                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
+                            })
+                            .catch((err) => {
+                                console.error(err);
+                            });
+                    } else if (mediaUrl && mediaId && Upload_Media_Method === 'qubu') {
                         imgURL = await tools.uploadImageQubu(mediaId, fileSuffix);
                         text = `<img src="${imgURL}">`;
                         replyMsg = await newbbTalk(text, MsgType);
+                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+                            .then(() => {
+                                // queryContentByPage 成功后
+                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
+                            })
+                            .catch((err) => {
+                                console.error(err);
+                            });
                     } else {
                         replyMsg = '云函数上传图片方式配置有误！可选 cos - 腾讯云存储桶；qubu - 去不图床';
                     }
@@ -221,10 +253,16 @@ async function handlePostRequest(event, lastMsgId) {
             //             // 下载文件并转换为 MP3 格式
             //             await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
             //             console.log('[INFO] 音频文件已成功转换为 MP3 格式并保存到指定路径！');
-            //             if (mediaUrl && mediaId && upload_Media_Method === 'cos') {
-            //                 cosPath = '/media/bb-media/';
-            //                 const voiceUrl = await tools.uploadMediaToCos(Tcb_Bucket, mediaId, Tcb_Region, cosPath, fileSuffix);
+            //             if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
+            //                 const voiceUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
             //                 replyMsg = await newbbTalk(voiceUrl, MsgType);
+            //                 tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+            //                 .then(() => {
+            //                 //根据需要再次通知客户端
+            //                 })
+            //                 .catch((err) => {
+            //                 console.error(err);
+            //                 });
             //             } else {
             //                 replyMsg = '云函数上传方式配置有误！音频消息仅支持上传方式为 cos 时处理';
             //             }
@@ -253,11 +291,18 @@ async function handlePostRequest(event, lastMsgId) {
                     fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
                     mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
                     await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-                    if (mediaUrl && mediaId && upload_Media_Method === 'cos') {
-                        cosPath = '/media/bb-media/';
-                        videoUrl = await tools.uploadMediaToCos(Tcb_Bucket, mediaId, Tcb_Region, cosPath, fileSuffix);
+                    if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
+                        videoUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
                         text = `<video src="${videoUrl}" controls></video>`;
                         replyMsg = await newbbTalk(text, MsgType);
+                        tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+                            .then(() => {
+                                // queryContentByPage 成功后
+                                console.log('[INFO] 执行 queryContentByPage 方法成功！')
+                            })
+                            .catch((err) => {
+                                console.error(err);
+                            });
                     } else {
                         replyMsg = '云函数上传方式配置有误！视频消息仅支持上传方式为 cos 时处理';
                     }
@@ -282,6 +327,14 @@ async function handlePostRequest(event, lastMsgId) {
                     console.log(script)
                     dom = dom.replace(/\s+/g, ' ').trim();
                     replyMsg = await newbbTalk(dom, MsgType, script);
+                    tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+                        .then(() => {
+                            // queryContentByPage 成功后
+                            console.log('[INFO] 执行 queryContentByPage 方法成功！')
+                        })
+                        .catch((err) => {
+                            console.error(err);
+                        });
                 } else {
                     replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
                     console.log('[INFO] 1005 回复以下命令绑定用户')
@@ -310,6 +363,14 @@ async function handlePostRequest(event, lastMsgId) {
                             `;
                     text = text.replace(/\s+/g, ' ').trim();
                     replyMsg = await newbbTalk(text, MsgType);
+                    tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
+                        .then(() => {
+                            // queryContentByPage 成功后
+                            console.log('[INFO] 执行 queryContentByPage 方法成功！')
+                        })
+                        .catch((err) => {
+                            console.error(err);
+                        });
                 } else {
                     replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
                     console.log('[INFO] 1005 回复以下命令绑定用户')
@@ -326,7 +387,20 @@ async function handlePostRequest(event, lastMsgId) {
             replyMsg = '暂不支持此类型消息';
         }
     }
+
+    // 超出微信允许最大长度截断，避免出现异常响应
+    const endingWord = '……';
+    const replyMsgByteLength = Buffer.byteLength(replyMsg, 'utf8')
+    const maxByteLength = 2047 - Buffer.byteLength(endingWord, 'utf8');
+    if (replyMsgByteLength > maxByteLength) {
+        const slicedMsg = tools.sliceByByte(replyMsg, maxByteLength);
+        replyMsg = slicedMsg + endingWord;
+    }
+    console.log('[INFO] replyMsgByteLength 为：' + replyMsgByteLength);
+    console.log('[INFO] maxByteLength 为：' + maxByteLength);
+
     const response = tools.encryptedXml(replyMsg, FromUserName, ToUserName, token, encodingAesKey, appId)
+    lastMsgId = MsgId;
     return response
 }
 
