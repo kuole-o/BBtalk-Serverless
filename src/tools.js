@@ -317,7 +317,7 @@ function deleteFolderRecursive(url) {
  * @param {string} altLat 纬度
  * @returns {Object} 返回一个对象，包含 dom 和 script 两个属性，分别为生成的 HTML 和 JavaScript 代码
  */
-function gaodeMap(zoom,alt,altLan,altLat){
+function gaodeMap(zoom, alt, altLan, altLat) {
   let mapWidth = '100%';
   let mapHeight = '360px';
   let gaode_txt = "高德地图";
@@ -355,14 +355,13 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
   console.log('[INFO] 已进入 queryContent 方法！')
   const query = new AV.Query('content');
   query.descending('createdAt');
-
   let results = [];
   let count = 0;
   let skip = ((pageNum - 1) * pageSize);
 
   console.log('[INFO] 开始查询 LeanCloud 数据...')
   query.skip(skip);
-  query.limit(pageSize); 
+  query.limit(1000);
   const [data, num] = await Promise.all([query.find(), query.count()]);
   results.push(...data);
   count += num;
@@ -384,9 +383,11 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
       query.skip(skip);
       const [subData, subNum] = await Promise.all([query.find(), query.count()]);
       results.push(...subData);
+      console.log('[INFO] subData 为：')
+      console.log(subData)
       count += subNum;
       skip += subData.length;
-      data.length = subData.length;
+      data = subData;
     }
     console.log('[INFO] 递归查询 LeanCloud 数据完成！')
     console.log('[INFO] 共查询到 ' + count + ' 条数据！')
