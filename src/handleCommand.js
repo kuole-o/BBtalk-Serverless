@@ -24,12 +24,25 @@ async function handleCommand(command, params, Content, FromUserName) {
     let replyMsg = '';
     let index = 0;
     let pageNum = 1;
+    let limit, content, other, bbList, newContent, results, query, result, match, matches, object, userConfig, List, order, inputContent;
     if (params > PageSize) {
         pageNum = Math.floor(params / PageSize) + 1;
     }
-    let limit, content, other, bbList, newContent, results, query, result, match, matches, object, userConfig, List, order, inputContent, updateContent;
-    console.log('[INFO] 1010 当前匹配到的 params 为：' + params)
-    console.log('[INFO] 1011 当前计算的 pageNum 为：' + pageNum)
+    matches = Content.match(/^\/([afe]\d*)\s*(.*)$/);
+    if (Array.isArray(matches) && matches.length > 1) {
+        inputContent = matches[2].trim();
+        console.log('[INFO] 1012 当前匹配到的 inputContent 为：' + inputContent)
+    }
+    console.log('[INFO] 当前匹配到的 matches 为：' , matches)
+    if (params) {
+        index = params - 1;
+        console.log('[INFO] params 存在，index 值为 params - 1 = ' + index)
+    } else {
+        index = 0;
+        console.log('[INFO] params 不存在，index 为默认值 0')
+    }
+    console.log('[INFO] 1013 当前匹配到的 params 为：' + params)
+    console.log('[INFO] 1014 当前计算的 pageNum 为：' + pageNum)
     switch (true) {
         case command === '/h':
             replyMsg = '「哔哔秘笈」\n==================\n/l 查询最近 10 条哔哔\n/l 数字 - 查询最近前几条，如 /l3\n---------------\n/a 文字 - 最新一条原内容后追加文字\n/a 数字 文字 - 第几条原内容后追加文字，如 /a3 开心！\n---------------\n/f 文字 - 最新一条原内容前插入文字\n/f 数字 文字 - 第几条原内容前插入文字，如 /f3 开心！\n---------------\n/s 关键词 - 搜索内容\n---------------\n/d 数字 - 删除第几条，如 /d2\n---------------\n/e 文字 - 编辑替换第 1 条\n/e 数字 文字 - 编辑替换第几条，如 /e2 新内容\n---------------\n/nobber - 解除绑定';
@@ -37,11 +50,9 @@ async function handleCommand(command, params, Content, FromUserName) {
         case command === '/l':
             limit = 10;
             if (params) {
-                if (params) {
-                    limit = params;
-                } else {
-                    replyMsg = '无效的参数，请输入 /l 数字';
-                }
+                limit = params;
+            } else {
+                replyMsg = '无效的参数，请输入 /l 数字';
             }
             try {
                 query = new AV.Query('content');
@@ -191,21 +202,14 @@ async function handleCommand(command, params, Content, FromUserName) {
             }
             break;
         case command === '/a' || command === '/f':
-            matches = Content.match(/^\/([af]\d*)\s*(.*)$/);
-            if (Array.isArray(matches) && matches.length > 1) {
-                index = params || 1;
-                inputContent = matches[2].trim();
-            }
-            console.log('[INFO] index 内容为：' + index)
-            console.log('[INFO] inputContent 内容为：' + inputContent)
             if (inputContent) {
                 try {
                     query = new AV.Query('content');
-                    query.limit(index);
+                    query.limit(params);
                     query.descending('createdAt');
                     results = await query.find();
-                    if (results[index - 1]) {
-                        object = results[index - 1];
+                    if (results[index]) {
+                        object = results[index];
                         content = object.get('content');
                         newContent = command === '/a' ? content + inputContent : inputContent + content;
                         object.set('content', newContent);
@@ -218,7 +222,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                             newContent = inputContent + content;
                             forward_back = '插入';
                         }
-                        replyMsg = `已${forward_back}文本到第 ${index} 条`
+                        replyMsg = `已${forward_back}文本到第 ${params} 条`
                     } else {
                         replyMsg = `无效的指令，请输入 “/a 内容”，追加内容到第 1 条；输入“/f 内容”，插入内容到第 1 条`;
                     }
@@ -236,13 +240,8 @@ async function handleCommand(command, params, Content, FromUserName) {
             }
             break;
         case command === '/e':
-            if (params) {
-                index = params - 1;
-                newContent = Content.split(' ').slice(2).join(' ');
-            } else {
-                index = 0;
-                newContent = Content.split(' ').slice(1).join(' ');
-            }
+            newContent = inputContent
+            console.log('[INFO] 1015 当前匹配到的 newContent 为：' + newContent)
             if (newContent) {
                 if (!params) {
                     params = 1;
@@ -256,7 +255,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                         object.set('content', newContent);
                         await object.save();
                         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize)
-                        replyMsg = '修改成功';
+                        replyMsg = `已修改第 ${params} 条内容为：${inputContent}`;
                     } else {
                         replyMsg = '无效的序号';
                     }

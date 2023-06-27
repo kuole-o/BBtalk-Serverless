@@ -358,24 +358,33 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
   let results = [];
   let count = 0;
   let skip = ((pageNum - 1) * pageSize);
+  let queryLimit = 0;
 
   console.log('[INFO] 开始查询 LeanCloud 数据...')
+  if (isRecursive) {
+    queryLimit = 1000;
+  } else {
+    queryLimit = pageSize;
+  }
+  console.log('[INFO] 首次查询，最多查询 ' + queryLimit + ' 条数据！')
   query.skip(skip);
-  query.limit(1000);
+  query.limit(queryLimit); 
   const [data, num] = await Promise.all([query.find(), query.count()]);
   results.push(...data);
   count += num;
   skip += data.length;
+  // console.log('[INFO] 以下将开始打印 results 数组数据：', results);
 
   console.log('[INFO] 查询 LeanCloud 数据完成！')
-  console.log('[INFO] 共查询到 ' + count + ' 条数据！')
+  console.log('[INFO] LeanCloud 共 ' + count + ' 条数据，但本次最多取回 ' + queryLimit + ' 条数据写入！')
 
   const pageCount = Math.ceil(count / pageSize); // 总页数
-  console.log('[INFO] 分页查询，共 ' + pageCount + ' 页！')
+  console.log('[INFO] 总条数计算分页，共 ' + pageCount + ' 页！')
 
   const promises = [];
   const shouldUpdateAll = (pageNum === 1 && isRecursive) || (pageNum > 1 && isRecursive && count % pageSize === 1);
-  console.log('[INFO] 当前 shouldUpdateAll 为：' + shouldUpdateAll)
+  console.log('[INFO] 当前 isRecursive 状态为：' + isRecursive)
+  console.log('[INFO] 当前 shouldUpdateAll 状态为：' + shouldUpdateAll)
   if (shouldUpdateAll) {
     console.log('[INFO] 开始递归查询 LeanCloud 数据...')
     query.limit(1000); // 一次最多查询 1000 条数据
@@ -383,8 +392,7 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
       query.skip(skip);
       const [subData, subNum] = await Promise.all([query.find(), query.count()]);
       results.push(...subData);
-      console.log('[INFO] subData 为：')
-      console.log(subData)
+      console.log('[INFO] 将 subData 增量写入 results ')
       count += subNum;
       skip += subData.length;
       data = subData;
@@ -411,7 +419,7 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
         results: formattedResults,
         count: count,
       };
-      const fileName = `bbtalk_page=${i}.json`;
+      const fileName = `bbtalk_page${i}.json`;
       console.log('[INFO] 生成 JSON 文件：' + fileName);
       const params = {
         Bucket: bucket,
@@ -432,9 +440,9 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
       }));
     }
   } else {
-    console.log('[INFO] 生成 JSON 文件：' + `bbtalk_page=${pageNum}.json`);
-    const startIndex = (pageNum - 1) * pageSize;
-    const endIndex = Math.min(pageNum * pageSize, count);
+    console.log('[INFO] 生成 JSON 文件：' + `bbtalk_page${pageNum}.json`);
+    const startIndex = 0;
+    const endIndex = pageSize;
     const subResults = results.slice(startIndex, endIndex);
     const formattedResults = subResults.map(result => {
       const formattedResult = {};
@@ -451,7 +459,7 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
       results: formattedResults,
       count: count,
     };
-    const fileName = `bbtalk_page=${pageNum}.json`;
+    const fileName = `bbtalk_page${pageNum}.json`;
     const params = {
       Bucket: bucket,
       Region: region,

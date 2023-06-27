@@ -104,15 +104,15 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                 // 匹配到指令内容
                 if (startsWithSlash) {
                     let command = '';
-                    let params = (Content.match(/^\/[a-z]\s*(\d+)?$/i) || [])[1] || '';
+                    let params = (Content.match(/^\/[a-z][\s\S]*?(\d+)?/i) || [])[1] || '';
                     if (matchCommand) {
                         command = matchCommand[0] || '';
                     }
                     if (params > PageSize) {
                         pageNum = Math.floor(params / PageSize) + 1;
                     }
-                    console.log('[INFO] 1012 当前匹配到的 params 为：' + params)
-                    console.log('[INFO] 1013 当前计算的 pageNum 为：' + pageNum)
+                    console.log('[INFO] 1010 当前匹配到的 params 为：' + params)
+                    console.log('[INFO] 1011 当前计算的 pageNum 为：' + pageNum)
                     switch (true) {
                         case command.includes('/h'):
                             command = '/h';
