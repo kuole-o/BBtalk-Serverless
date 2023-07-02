@@ -202,8 +202,8 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else if (mediaUrl && mediaId && Upload_Media_Method === 'qubu') {
                         imgURL = await tools.uploadImageQubu(mediaId, fileSuffix);
-                        text = `<img src="${imgURL}">`;
-                        replyMsg = await newbbTalk(text, MsgType);
+                        //text = `<img src="${imgURL}">`;
+                        replyMsg = await newbbTalk(imgURL, MsgType);
                         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else {
                         replyMsg = '云函数上传图片方式配置有误！可选 cos - 腾讯云存储桶；qubu - 去不图床';
@@ -266,8 +266,8 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                     await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
                     if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
                         videoUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
-                        text = `<video src="${videoUrl}" controls></video>`;
-                        replyMsg = await newbbTalk(text, MsgType);
+                        //text = `<video src="${videoUrl}" controls></video>`;
+                        replyMsg = await newbbTalk(videoUrl, MsgType);
                         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else {
                         replyMsg = '云函数上传方式配置有误！视频消息仅支持上传方式为 cos 时处理';

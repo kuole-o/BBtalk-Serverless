@@ -9,6 +9,11 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
 ## 更新日志
   
 <details>
+<summary>v1.0.4</summary>
+  * 优化：图片或视频不再云函数中转成`html`标签，直接写入`URL`，由客户端处理插入 <br>  
+</details>
+
+<details>
 <summary>v1.0.3</summary>
   * Bugfix：解决 /e 命令部分场景下匹配不到的问题； <br>  
   * 优化：/a /f /e 匹配方式合并统一；若非删除、新增闪念（说明除了被操作这一条所在的页需要更新外，其他页无需更新）操作，只拉取当前页`pageSize`条数据更新 JSON，非 1000 条，数据量大时可提升性能； <br>  
