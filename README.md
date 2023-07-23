@@ -9,6 +9,12 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
 ## 更新日志
   
 <details>
+<summary>v1.0.5</summary>
+  * 改进：发图片时，不再拼接成 `<img>` 标签，交给前端渲染时处理；<br> 
+  * 修复：`/a` 与 `/f` 命令中，未明确处理第几条内容而默认处理最近 1 条说说时，回复文案异常的问题<br>  
+</details>
+
+<details>
 <summary>v1.0.4</summary>
   * 优化：图片或视频不再云函数中转成`html`标签，直接写入`URL`，由客户端处理插入 <br>  
 </details>

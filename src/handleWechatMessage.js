@@ -198,7 +198,7 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
                     if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
                         imgURL = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_ImagePath, mediaId, fileSuffix);
                         text = `<img src="${imgURL}">`;
-                        replyMsg = await newbbTalk(text, MsgType);
+                        replyMsg = await newbbTalk(imgURL, MsgType);
                         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                     } else if (mediaUrl && mediaId && Upload_Media_Method === 'qubu') {
                         imgURL = await tools.uploadImageQubu(mediaId, fileSuffix);

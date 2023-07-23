@@ -203,6 +203,7 @@ async function handleCommand(command, params, Content, FromUserName) {
             break;
         case command === '/a' || command === '/f':
             if (inputContent) {
+                params = params || 1;
                 try {
                     query = new AV.Query('content');
                     query.limit(params);
@@ -243,9 +244,7 @@ async function handleCommand(command, params, Content, FromUserName) {
             newContent = inputContent
             console.log('[INFO] 1015 当前匹配到的 newContent 为：' + newContent)
             if (newContent) {
-                if (!params) {
-                    params = 1;
-                }
+                params = params || 1;
                 try {
                     query = new AV.Query('content');
                     query.descending('createdAt').limit(params);
