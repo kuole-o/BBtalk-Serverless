@@ -408,7 +408,11 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
         const formattedResult = {};
         formattedResult.MsgType = result.get('MsgType');
         formattedResult.content = result.get('content');
-        formattedResult.other = result.get('other');
+        if (result.get('MsgType') === 'music') {
+          formattedResult.other = JSON.parse(result.get('other'));
+        } else {
+          formattedResult.other = result.get('other');
+        }
         formattedResult.from = result.get('from');
         formattedResult.createdAt = result.get('createdAt');
         formattedResult.updatedAt = result.get('updatedAt');
@@ -448,7 +452,11 @@ async function queryContentByPage(bucket, region, cosPath, pageNum, pageSize, is
       const formattedResult = {};
       formattedResult.MsgType = result.get('MsgType');
       formattedResult.content = result.get('content');
-      formattedResult.other = result.get('other');
+      if (result.get('MsgType') === 'music') {
+        formattedResult.other = JSON.parse(result.get('other'));
+      } else {
+        formattedResult.other = result.get('other');
+      }
       formattedResult.from = result.get('from');
       formattedResult.createdAt = result.get('createdAt');
       formattedResult.updatedAt = result.get('updatedAt');
