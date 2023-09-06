@@ -10,7 +10,7 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
   
 <details>
 <summary>v1.0.6</summary>
-  * 改进：现在数据表中的 `other` 字段可以存储一个自定义的 JSON 结构音乐信息（如下文），配合 bbtalk.js 实现某些 vip 歌曲的自定义说说引用播放（此时`MsgType`需要为“music”）；<br> 
+  1. 改进：现在数据表中的 `other` 字段可以存储一个自定义的 JSON 结构音乐信息（如下文），配合 bbtalk.js 实现某些 vip 歌曲的自定义说说引用播放（此时`MsgType`需要为“music”）；<br> 
   ```json
   {
     "name": "有空地的地方就有人跳舞 (居家Demo版)",
@@ -21,8 +21,8 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
   }
   ```
   <br> 
-  * 新增一个`upload-bbtalk-cos.js`方法，用来在一些单独调用 LeanCloud 接口或反代理接口时（比如用 Siri 捷径发说说，不走公众号），通知 cos 更新最新的 LeanCloud 分页 JSON 数据；使用时，单独再新建一个云函数，需要环境变量`Binding_Key`，调用接口时可以用 GET 方式传参“?binding-key=xxxx” 或 POST 方式在 heards 中传参 “binding-key=xxxx”。请求地址是配置完云函数，绑定的“触发器”公网地址；<br> 
-  * 最新的前端 `bbtalk.js` 可以去我博客扒。已支持 QQ 音乐或网易云音乐单首歌曲或歌单的分享。（在 app 里点击“分享”找到“复制链接”，用这个链接才可以获取到歌曲id或歌单id。一般直接分享会有个小程序链接之类的，或者其他短链接，在浏览器访问一次，然后复制那个 URL 就行了）；<br> 
+  2. 新增一个`upload-bbtalk-cos.js`方法，用来在一些单独调用 LeanCloud 接口或反代理接口时（比如用 Siri 捷径发说说，不走公众号），通知 cos 更新最新的 LeanCloud 分页 JSON 数据；使用时，单独再新建一个云函数，需要环境变量`Binding_Key`，调用接口时可以用 GET 方式传参“?binding-key=xxxx” 或 POST 方式在 heards 中传参 “binding-key=xxxx”。请求地址是配置完云函数，绑定的“触发器”公网地址；<br> 
+  3. 最新的前端 `bbtalk.js` 可以去我博客扒。已支持 QQ 音乐或网易云音乐单首歌曲或歌单的分享。（在 app 里点击“分享”找到“复制链接”，用这个链接才可以获取到歌曲id或歌单id。一般直接分享会有个小程序链接之类的，或者其他短链接，在浏览器访问一次，然后复制那个 URL 就行了）；<br> 
 </details>
 
 <details>
