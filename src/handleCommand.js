@@ -10,6 +10,8 @@ const PageSize = process.env.PageSize || 10;
 const Tcb_Bucket = process.env.Tcb_Bucket;
 const Tcb_Region = process.env.Tcb_Region;
 const Tcb_JsonPath = process.env.Tcb_JsonPath;
+const Tcb_ImagePath = process.env.Tcb_ImagePath;
+const Tcb_MediaPath = process.env.Tcb_MediaPath;
 const Tcb_SecretId = process.env.Tcb_SecretId;
 const Tcb_SecretKey = process.env.Tcb_SecretKey;
 
@@ -71,7 +73,7 @@ async function handleCommand(command, params, Content, FromUserName) {
             } catch (err) {
                 console.error(err);
                 if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                 } else {
                     replyMsg = '获取哔哔内容发生未知错误，请稍后再试！';
                 }
@@ -120,7 +122,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                 } catch (err) {
                     console.error(err);
                     if (err.response) {
-                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                     } else {
                         replyMsg = '查询结果时发生未知错误，请稍后再试！';
                     }
@@ -139,38 +141,15 @@ async function handleCommand(command, params, Content, FromUserName) {
                     if (results[index]) {
                         object = results[index];
                         content = object.get('content');
-                        other = object.get('other');
                         console.log('[INFO] content 为：' + content)
-                        console.log('[INFO] other 为：' + other)
-                        let regex = `https?:\\/\\/${SubDomain}\\.${SecondLevelDomain}\\.${TopDomain}\\/\\S+?(?=[\\s\\n>|])(?!"')`;
-                        regex = new RegExp(regex);
-                        let contentUrlRegex = `https?:\\/\\/${SubDomain}\\.${SecondLevelDomain}\\.${TopDomain}\\/`;
-                        contentUrlRegex = new RegExp(contentUrlRegex);
 
-                        let contentUrl = content.match(regex)?.[0]
-                        let otherUrl = other.match(regex)?.[0];
+                        const urlRegex = /((http?s):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])/g;
 
-                        contentUrl = contentUrl?.replace(/"/g, "");
-                        console.log('[INFO] contentUrl 为：' + contentUrl)
-                        otherUrl = otherUrl?.replace(/"/g, "");
-                        console.log('[INFO] otherUrl 为：' + otherUrl)
-                        await object.destroy();
-                        if (contentUrl) {
-                            const filePath = contentUrl.replace(contentUrlRegex, "");
-                            console.log('[INFO] filePath 为：' + filePath)
-                            TcbCOS.deleteObject({
-                                Bucket: Tcb_Bucket,
-                                Region: Tcb_Region,
-                                Key: filePath,
-                            }, function (err, data) {
-                                if (err) {
-                                    console.log(err);
-                                } else {
-                                    console.log(data);
-                                }
-                            });
-                        } else if (otherUrl) {
-                            const filePath = otherUrl.replace(contentUrlRegex, "");
+                        let contentUrl = content.match(urlRegex)[0];
+                        contentUrl = new URL(contentUrl);
+
+                        if (contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_ImagePath}` || `${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_MediaPath}`)) {
+                            const filePath = contentUrl.pathname;
                             console.log('[INFO] filePath 为：' + filePath)
                             TcbCOS.deleteObject({
                                 Bucket: Tcb_Bucket,
@@ -184,6 +163,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                                 }
                             });
                         }
+                        await object.destroy();
                         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
                         replyMsg = '删除成功';
                     } else {
@@ -192,7 +172,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                 } catch (err) {
                     console.error(err);
                     if (err.response) {
-                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                     } else {
                         replyMsg = '删除内容时发生未知错误，请稍后再试！';
                     }
@@ -230,7 +210,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                 } catch (err) {
                     console.error(err);
                     if (err.response) {
-                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                     } else {
                         replyMsg = '查询目标 objectId 发生未知错误，请稍后再试！'
                     }
@@ -261,7 +241,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                 } catch (err) {
                     console.error(err);
                     if (err.response) {
-                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                     } else {
                         replyMsg = '修改内容时发生未知错误，请稍后再试！';
                     }
@@ -297,7 +277,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                         } catch (err) {
                             console.error(err);
                             if (err.response) {
-                                replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                                replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                             } else {
                                 replyMsg = '保存绑定状态 isBinding 出现未知错误，请稍后再试！';
                             }
@@ -307,7 +287,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                 } catch (err) {
                     console.error(err);
                     if (err.response) {
-                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                        replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                     } else {
                         replyMsg = '存储绑定关系请求出错，请稍后再试！';
                     }
@@ -332,7 +312,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                     } catch (err) {
                         console.error(err);
                         if (err.response) {
-                            replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                            replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                         } else {
                             replyMsg = '本次解绑发生未知错误，解除绑定失败！';
                         }
@@ -341,7 +321,7 @@ async function handleCommand(command, params, Content, FromUserName) {
             } catch (err) {
                 console.error(err);
                 if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
                 } else {
                     replyMsg = '验证绑定状态时发生未知错误，请稍后再试！';
                 }
@@ -396,7 +376,7 @@ async function newbbTalk(Content, MsgType, Script = '') {
     } catch (err) {
         console.error(err);
         if (err.response) {
-            replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
+            replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: ${JSON.stringify(err.response.data)}`
         } else {
             replyMsg = '发布哔哔发生未知错误，请稍后再试！';
         }
