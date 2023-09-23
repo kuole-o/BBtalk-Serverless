@@ -7,7 +7,12 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
 * https://github.com/kuole-o/BBtalk-Serverless/main/LICENSE
   
 ## 更新日志
-  
+
+<details>
+<summary>v1.0.7</summary>
+  * 修复：使用`/d`命令时，无法正常删除 cos 中对应资源的 Bug；<br> 
+</details>
+
 <details>
 <summary>v1.0.6</summary>
   * 改进：现在数据表中的 `other` 字段可以存储一个自定义的 JSON 结构音乐信息（如 {"name":"有空地的地方就有人跳舞 (居家Demo版)","artist":"新裤子","cover":"https://xxx/xxx.jpg","url":"https://xxx/xxx.mp3","lrc":""}），配合 bbtalk.js 实现某些 vip 歌曲的自定义说说引用播放（此时`MsgType`需要为“music”）；<br> 
