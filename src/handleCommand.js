@@ -147,8 +147,11 @@ async function handleCommand(command, params, Content, FromUserName) {
 
                         let contentUrl = content.match(urlRegex)[0];
                         contentUrl = new URL(contentUrl);
+                        const isDeleteFile = contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_ImagePath}`) || contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_MediaPath}`);
+                        console.log('[INFO] contentUrl.href 值为: ' + contentUrl.href)
+                        console.log('[INFO] isDeleteFile 值为: ' + isDeleteFile)
 
-                        if (contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_ImagePath}` || `${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_MediaPath}`)) {
+                        if (isDeleteFile) {
                             const filePath = contentUrl.pathname;
                             console.log('[INFO] filePath 为：' + filePath)
                             TcbCOS.deleteObject({
