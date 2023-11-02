@@ -9,6 +9,11 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
 ## 更新日志
 
 <details>
+<summary>v1.0.8</summary>
+  * 修复：使用`/d`命令时，若 content 内容不包含 URL，此时会报错“删除内容时发生未知错误，请稍后再试！”的 Bug；<br> 
+</details>
+
+<details>
 <summary>v1.0.7</summary>
   * 修复：使用`/d`命令时，无法正常删除 cos 中对应资源的 Bug；<br> 
 </details>
