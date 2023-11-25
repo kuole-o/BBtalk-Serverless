@@ -144,13 +144,15 @@ async function handleCommand(command, params, Content, FromUserName) {
                         console.log('[INFO] content 为：' + content)
 
                         const urlRegex = /((http?s):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])/g;
+                        let contentUrl,isDeleteFile;
 
-                        let contentUrl = content.match(urlRegex)[0];
-                        contentUrl = new URL(contentUrl);
-                        const isDeleteFile = contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_ImagePath}`) || contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_MediaPath}`);
-                        console.log('[INFO] contentUrl.href 值为: ' + contentUrl.href)
-                        console.log('[INFO] isDeleteFile 值为: ' + isDeleteFile)
-
+                        if (urlRegex.test(content)) {
+                            contentUrl = content.match(urlRegex)[0];
+                            contentUrl = new URL(contentUrl);
+                            isDeleteFile = contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_ImagePath}`) || contentUrl.href.includes(`${SubDomain}.${SecondLevelDomain}.${TopDomain}${Tcb_MediaPath}`);
+                            console.log('[INFO] contentUrl.href 值为: ' + contentUrl.href)
+                            console.log('[INFO] isDeleteFile 值为: ' + isDeleteFile)
+                        }
                         if (isDeleteFile) {
                             const filePath = contentUrl.pathname;
                             console.log('[INFO] filePath 为：' + filePath)
