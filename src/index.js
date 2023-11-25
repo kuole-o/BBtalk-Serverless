@@ -21,6 +21,18 @@ exports.main_handler = async (event, context, callback) => {
 
     var pageNum = 1;
     var lastMsgId = null; // 全局变量，标识是否已处理请求
+
+    // 处理函数定时激活
+    const isScfActivation = (queryString && queryString.auto) || (event && event.auto) || false;
+    if (isScfActivation) {
+        return {
+            "isBase64Encoded": false,
+            "statusCode": 200,
+            "headers": { "Content-Type": "text/plain; charset=utf-8" },
+            "body": "Success 触发云函数成功！"
+        }
+    }
+
     // 处理微信验证请求
     if (httpMethod === 'GET' && queryString) {
         try {
@@ -35,10 +47,7 @@ exports.main_handler = async (event, context, callback) => {
         } catch (err) {
             console.error(err)
         }
-    }
-
-    // 处理微信发来的消息
-    if (httpMethod === 'POST' && body) {
+    } else if (httpMethod === 'POST' && body) {// 处理微信发来的消息
         try {
             content_text = await handlePostRequest(event, lastMsgId, pageNum);
             response = {

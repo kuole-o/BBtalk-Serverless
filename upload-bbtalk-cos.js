@@ -36,17 +36,29 @@ const TcbCOS = new COS({
 exports.main_handler = async (event, context) => {
   const { httpMethod, headers, queryString, body } = event;
 
+  // 处理函数定时激活
+  const isScfActivation = (queryString && queryString.auto) || (event && event.auto) || false;
+  if (isScfActivation) {
+    return {
+      "isBase64Encoded": false,
+      "statusCode": 200,
+      "headers": { "Content-Type": "text/plain; charset=utf-8" },
+      "body": "Success 触发云函数成功！"
+    }
+  }
+
   // 验证请求是否包含 Binding_Key
   const requestBindingKey = headers['binding-key'] || queryString['binding-key'] || '';
   const type = headers['type'] || queryString['type'] || 1;
-  console.log("headers：", headers)
-  console.log("requestBindingKey：", requestBindingKey)
+  console.log("headers：", headers);
+  console.log("requestBindingKey：", requestBindingKey);
+
   if (requestBindingKey !== Binding_Key) {
     return {
       "isBase64Encoded": false,
       "statusCode": 403,
-      "headers": {"Content-Type":"text/html; charset=utf-8"},
-      "body":  JSON.stringify({
+      "headers": { "Content-Type": "text/html; charset=utf-8" },
+      "body": JSON.stringify({
         code: 403,
         message: '未经授权'
       })
@@ -57,7 +69,7 @@ exports.main_handler = async (event, context) => {
     return {
       "isBase64Encoded": false,
       "statusCode": 405,
-      "headers": {"Content-Type":"text/html; charset=utf-8"},
+      "headers": { "Content-Type": "text/html; charset=utf-8" },
       "body": JSON.stringify({
         code: 405,
         message: '不支持的请求方式'
@@ -70,7 +82,7 @@ exports.main_handler = async (event, context) => {
     return {
       "isBase64Encoded": false,
       "statusCode": 200,
-      "headers": {"Content-Type":"text/html; charset=utf-8"},
+      "headers": { "Content-Type": "text/html; charset=utf-8" },
       "body": JSON.stringify({
         code: 200,
         message: "BBtalk 最新数据分页 JSON 上传成功！"
@@ -81,7 +93,7 @@ exports.main_handler = async (event, context) => {
     return {
       "isBase64Encoded": false,
       "statusCode": 500,
-      "headers": {"Content-Type":"text/html; charset=utf-8"},
+      "headers": { "Content-Type": "text/html; charset=utf-8" },
       "body": JSON.stringify({
         code: 405,
         message: error.message
