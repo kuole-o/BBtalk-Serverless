@@ -1,6 +1,7 @@
 'use strict';
 const Tcb_SecretId = process.env.Tcb_SecretId;
 const Tcb_SecretKey = process.env.Tcb_SecretKey;
+const token = process.env.token;
 const wecomWebHook = process.env.WeComWebHook;
 const tencentcloud = require("tencentcloud-sdk-nodejs");
 const axios = require('axios');
@@ -50,11 +51,24 @@ exports.main_handler = async (event, context) => {
   try {
     const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod, MsgId } = event;
 
+    // 简单鉴权
+    const request_token =
+      (headers && headers.token) ||
+      (queryString && queryString.token) ||
+      (event && event.token) ||
+      "";
+    if (request_token !== token) return {
+      "isBase64Encoded": false,
+      "statusCode": 401,
+      "headers": { "Content-Type": "text/plain; charset=utf-8" },
+      "body": "Unauthorized",
+    }
+
     const scfName = ["bbtalk-wechat", "upload-bbtalk-cos", "ssl-update-1684589326", "cdn_cache_refresh"];
     const invokePromises = scfName.map(async (name) => {
       const params = {
         "FunctionName": name, // 云函数名称
-        "ClientContext": "{\"auto\":1}",
+        "ClientContext": `{\"auto\":1,\"token\":\"${token}\"}`,
         "Namespace": "default",
       };
 

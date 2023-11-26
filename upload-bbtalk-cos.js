@@ -2,9 +2,9 @@ const COS = require('cos-nodejs-sdk-v5');
 const fs = require('fs');
 const AV = require('leanengine');
 
-const Binding_Key = process.env.Binding_Key;
 const Tcb_SecretId = process.env.Tcb_SecretId;
 const Tcb_SecretKey = process.env.Tcb_SecretKey;
+const token = process.env.token;
 const PageSize = process.env.PageSize || 12;
 const bucket = process.env.Tcb_Bucket;
 const region = process.env.Tcb_Region;
@@ -36,6 +36,19 @@ const TcbCOS = new COS({
 exports.main_handler = async (event, context) => {
   const { httpMethod, headers, queryString, body } = event;
 
+  // 简单鉴权
+  const request_token =
+    (headers && headers.token) ||
+    (queryString && queryString.token) ||
+    (event && event.token) ||
+    "";
+  if (request_token !== token) return {
+    "isBase64Encoded": false,
+    "statusCode": 401,
+    "headers": { "Content-Type": "text/plain; charset=utf-8" },
+    "body": "Unauthorized",
+  }
+
   // 处理函数定时激活
   const isScfActivation = (queryString && queryString.auto) || (event && event.auto) || false;
   if (isScfActivation) {
@@ -47,23 +60,9 @@ exports.main_handler = async (event, context) => {
     }
   }
 
-  // 验证请求是否包含 Binding_Key
-  const requestBindingKey = headers['binding-key'] || queryString['binding-key'] || '';
+
   const type = headers['type'] || queryString['type'] || 1;
   console.log("headers：", headers);
-  console.log("requestBindingKey：", requestBindingKey);
-
-  if (requestBindingKey !== Binding_Key) {
-    return {
-      "isBase64Encoded": false,
-      "statusCode": 403,
-      "headers": { "Content-Type": "text/html; charset=utf-8" },
-      "body": JSON.stringify({
-        code: 403,
-        message: '未经授权'
-      })
-    };
-  }
 
   if (httpMethod !== 'POST' && httpMethod !== 'GET') {
     return {

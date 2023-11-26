@@ -4,6 +4,7 @@ const { handleGetRequest, handlePostRequest } = require('./handleWechatMessage')
 const LeanCloud_ID = process.env.LeanCloud_ID;
 const LeanCloud_KEY = process.env.LeanCloud_KEY;
 const LeanCloud_MasterKey = process.env.LeanCloud_MasterKey;
+const token = process.env.token;
 
 AV.init({
     appId: LeanCloud_ID,
@@ -23,13 +24,25 @@ exports.main_handler = async (event, context, callback) => {
     var lastMsgId = null; // 全局变量，标识是否已处理请求
 
     // 处理函数定时激活
+    const request_token =
+        (headers && headers.token) ||
+        (queryString && queryString.token) ||
+        (event && event.token) ||
+        "";
     const isScfActivation = (queryString && queryString.auto) || (event && event.auto) || false;
-    if (isScfActivation) {
+    if (isScfActivation && request_token === token) {
         return {
             "isBase64Encoded": false,
             "statusCode": 200,
             "headers": { "Content-Type": "text/plain; charset=utf-8" },
             "body": "Success 触发云函数成功！"
+        }
+    } else if (isScfActivation && request_token !== token) {
+        return {
+            "isBase64Encoded": false,
+            "statusCode": 401,
+            "headers": { "Content-Type": "text/plain; charset=utf-8" },
+            "body": "Unauthorized",
         }
     }
 

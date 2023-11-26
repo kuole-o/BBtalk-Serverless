@@ -1,6 +1,7 @@
 'use strict';
 const Tcb_SecretId = process.env.Tcb_SecretId;
 const Tcb_SecretKey = process.env.Tcb_SecretKey;
+const token = process.env.token;
 const wecomWebHook = process.env.WeComWebHook;
 const tencentcloud = require("tencentcloud-sdk-nodejs");
 const axios = require('axios');
@@ -53,6 +54,19 @@ const client = new CdnClient(clientConfig);
 
 exports.main_handler = async (event, context) => {
   const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod, MsgId } = event;
+
+  // 简单鉴权
+  const request_token =
+    (headers && headers.token) ||
+    (queryString && queryString.token) ||
+    (event && event.token) ||
+    "";
+  if (request_token !== token) return {
+    "isBase64Encoded": false,
+    "statusCode": 401,
+    "headers": { "Content-Type": "text/plain; charset=utf-8" },
+    "body": "Unauthorized",
+  }
 
   // 处理函数定时激活
   const isScfActivation = (queryString && queryString.auto) || (event && event.auto) || false;
