@@ -100,10 +100,7 @@ exports.main_handler = async (event, context) => {
         "isBase64Encoded": false,
         "statusCode": code,
         "headers": { "Content-Type": "text/html; charset=utf-8" },
-        "body": JSON.stringify({
-          code: code,
-          message: content
-        })
+        "body": content,
       };
     }
 
@@ -115,10 +112,7 @@ exports.main_handler = async (event, context) => {
         "isBase64Encoded": false,
         "statusCode": code,
         "headers": { "Content-Type": "text/html; charset=utf-8" },
-        "body": JSON.stringify({
-          code: code,
-          message: content
-        })
+        "body": content,
       };
     }
 
@@ -143,10 +137,7 @@ exports.main_handler = async (event, context) => {
       "isBase64Encoded": false,
       "statusCode": code,
       "headers": { "Content-Type": "text/html; charset=utf-8" },
-      "body": JSON.stringify({
-        code: code,
-        message: content
-      })
+      "body": content,
     };
   } catch (err) {
     console.error("Error:", err);
@@ -154,10 +145,7 @@ exports.main_handler = async (event, context) => {
       "isBase64Encoded": false,
       "statusCode": 500,
       "headers": { "Content-Type": "text/html; charset=utf-8" },
-      "body": JSON.stringify({
-        code: 500,
-        message: `处理 CDN 刷新请求时出现错误：${err.message}`
-      })
+      "body": `处理 CDN 刷新请求时出现错误：${err.message}`,
     };
   }
 };
