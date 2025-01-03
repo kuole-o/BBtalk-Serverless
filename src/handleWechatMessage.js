@@ -207,7 +207,7 @@ async function processMessage(messageData, pageNum) {
         // 处理关注事件
         if (MsgType === 'event') {
             if (Event === 'subscribe') {
-                return '欢迎关注哔哔闪念！了解哔哔闪念搭建方法，请查阅： https://blog.guole.fun/posts/17745/';
+                return '欢迎关注哔哔闪念！\n\n 了解哔哔闪念搭建方法，请查阅： https://blog.guole.fun/posts/17745/';
             } else if (Event === 'unsubscribe') {
                 return '您已取消关注，期待下次再见！';
             } else {    
