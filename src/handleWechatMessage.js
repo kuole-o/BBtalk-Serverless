@@ -1,359 +1,412 @@
 const xml2js = require('xml2js');
 const crypto = require('crypto');
-const tools = require('./tools'); // 引入工具类方法
-const { handleCommand, newbbTalk } = require('./handleCommand'); // 引入处理指令的逻辑
+const tools = require('./tools');
+const { handleCommand, newbbTalk } = require('./handleCommand');
+const { createLogger } = require('./utils/logger');
+const config = require('./config');
 
-const PageSize = process.env.PageSize || 10;
-const Tcb_Bucket = process.env.Tcb_Bucket;
-const Tcb_Region = process.env.Tcb_Region;
+const logger = createLogger('WechatMessage');
 
-const Tcb_JsonPath = process.env.Tcb_JsonPath;
-const Tcb_ImagePath = process.env.Tcb_ImagePath;
-const Tcb_MediaPath = process.env.Tcb_MediaPath;
+// 从配置中获取环境变量
+const {
+    PageSize,
+    Tcb: {
+        Bucket: Tcb_Bucket,
+        Region: Tcb_Region,
+        JsonPath: Tcb_JsonPath,
+        ImagePath: Tcb_ImagePath,
+        MediaPath: Tcb_MediaPath
+    },
+    WeChat: {
+        token,
+        encodingAesKey,
+        appId,
+        appSecret
+    },
+    Upload_Media_Method
+} = config;
 
-const token = process.env.WeChat_Token;
-const encodingAesKey = process.env.WeChat_encodingAesKey;
-const appId = process.env.WeChat_appId; //微信公众平台 appId
-const appSecret = process.env.WeChat_appSecret; //微信公众平台 appSecret
-const Upload_Media_Method = process.env.Upload_Media_Method || 'cos'; // 导入上传媒体的方式，环境变量配置可选值：cos - 腾讯云存储桶；qubu - 去不图床；使用发视频功能，必须选择 cos 方式；
-
+// 处理 GET 请求 - 微信服务器认证
 async function handleGetRequest(event) {
-    const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod } = event;
+    try {
+        const { signature, timestamp, nonce, echostr } = event.queryString;
 
-    // 验证请求是否来自微信服务器
-    const { signature, timestamp, nonce, echostr } = event.queryString;
-    const tmpStr = crypto.createHash('sha1').update([token, timestamp, nonce].sort().join('')).digest('hex'); // 计算 SHA1 哈希值
+        // 验证必要参数
     if (!signature || !timestamp || !nonce || !echostr) {
-        let response = { statusCode: 400 }
-        if (requestContext) response.requestContext = requestContext
-        if (headers) response.headers = headers
-        if (body) response.body = body
-        if (pathParameters) response.pathParameters = pathParameters
-        if (queryStringParameters) response.queryStringParameters = queryStringParameters
-        if (headerParameters) response.headerParameters = headerParameters
-        if (path) response.path = path
-        if (queryString) response.queryString = queryString
-        if (httpMethod) response.httpMethod = httpMethod
-        console.log(response)
-        return response;
-    }
-    if (tmpStr === signature) {
-        console.log(event)
-        return echostr
-    } else {
-        let response = { statusCode: 401 }
-        if (requestContext) response.requestContext = requestContext
-        if (headers) response.headers = headers
-        if (body) response.body = body
-        if (pathParameters) response.pathParameters = pathParameters
-        if (queryStringParameters) response.queryStringParameters = queryStringParameters
-        if (headerParameters) response.headerParameters = headerParameters
-        if (path) response.path = path
-        if (queryString) response.queryString = queryString
-        if (httpMethod) response.httpMethod = httpMethod
-        console.log(response)
-        return response;
+            logger.warn('缺少必要的验证参数');
+            return createResponse(400);
+        }
+
+        // 验证签名
+        const tmpStr = crypto.createHash('sha1')
+            .update([token, timestamp, nonce].sort().join(''))
+            .digest('hex');
+            
+        if (tmpStr !== signature) {
+            logger.warn('签名验证失败');
+            return createResponse(401);
+        }
+
+        logger.info('微信服务器验证成功');
+        return echostr;
+    } catch (err) {
+        logger.error('处理GET请求失败:', err);
+        return createResponse(500);
     }
 }
 
+// 处理 POST 请求 - 接收微信消息
 async function handlePostRequest(event, lastMsgId, pageNum) {
-    const { requestContext, headers, body, pathParameters, queryStringParameters, headerParameters, path, queryString, httpMethod } = event;
-    //console.log('[INFO] 请求 event 为：')
-    //console.log(event)
-    const parser = new xml2js.Parser({ explicitArray: false, ignoreAttrs: true });
-    const xmlStr = await parser.parseStringPromise(body.toString());
-    const { ToUserName, FromUserName, CreateTime, MsgType, MediaId, Content, MsgId, PicUrl, Format, ThumbMediaId, Location_X, Location_Y, Scale, Label, Title, Description, Url } = xmlStr.xml || {};
-    if (ToUserName) console.log('[INFO] 请求 ToUserName 为：' + ToUserName);
-    if (FromUserName) console.log('[INFO] 请求 FromUserName 为：' + FromUserName);
-    if (CreateTime) console.log('[INFO] 请求 CreateTime 为：' + CreateTime);
-    if (MsgType) console.log('[INFO] 请求 MsgType 为：' + MsgType);
-    if (MediaId) console.log('[INFO] 请求 MediaId 为：' + MediaId);
-    if (Content) console.log('[INFO] 请求 Content 为：' + Content);
-    if (lastMsgId) console.log('[INFO] 请求 lastMsgId 为：' + lastMsgId);
-    if (MsgId) console.log('[INFO] 请求 MsgId 为：' + MsgId);
-    if (PicUrl) console.log('[INFO] 请求 PicUrl 为：' + PicUrl);
-    if (Format) console.log('[INFO] 请求 Format (语音格式)为：' + Format);
-    if (ThumbMediaId) console.log('[INFO] 请求 ThumbMediaId (视频封面图 id)为：' + ThumbMediaId);
-    if (Location_X) console.log('[INFO] 请求 Location_X (纬度)为：' + Location_X);
-    if (Location_Y) console.log('[INFO] 请求 Location_Y (经度)为：' + Location_Y);
-    if (Scale) console.log('[INFO] 请求 Scale (地图缩放大小)为：' + Scale);
-    if (Label) console.log('[INFO] 请求 Label (地理位置信息)为：' + Label);
-    if (Title) console.log('[INFO] 请求 Title 为：' + Title);
-    if (Description) console.log('[INFO] 请求 Description 为：' + Description);
-    if (Url) console.log('[INFO] 请求 Url 为：' + Url);
-
-    var replyMsg = '';
-
-
-    if (MsgId == lastMsgId) {
-        replyMsg = 'success';
-    } else {
-        let startsWithSlash, matchCommand;
-        if (Content !== undefined) {
-            startsWithSlash = Content.match(/^\/.*/);
-            matchCommand = Content.match(/^\/[a-z]+\s*(\d+)?|\/b\s*bb,/i);
-        } else {
-            startsWithSlash = '';
-            matchCommand = '';
+    try {
+        const xmlStr = await parseXmlBody(event.body);
+        if (!xmlStr?.xml) {
+            logger.error('解析XML失败');
+            return createResponse(400);
         }
-        const isCommandRegex = /^\/.*/;
-        let result, wechat_access_token, fileSuffix, videoUrl, text, mediaUrl;
-        const mediaId = MediaId;
-        if (MsgType === 'text') {
-            try {
-                // 匹配到指令内容
-                if (startsWithSlash) {
-                    let command = '';
-                    let params = (Content.match(/^\/[a-z][\s\S]*?(\d+)?/i) || [])[1] || '';
-                    if (matchCommand) {
-                        command = matchCommand[0] || '';
-                    }
-                    if (params > PageSize) {
-                        pageNum = Math.floor(params / PageSize) + 1;
-                    }
-                    console.log('[INFO] 1010 当前匹配到的 params 为：' + params)
-                    console.log('[INFO] 1011 当前计算的 pageNum 为：' + pageNum)
-                    switch (true) {
-                        case command.includes('/h'):
-                            command = '/h';
-                            break;
-                        case command.includes('/l'):
-                            command = '/l';
-                            break;
-                        case command.includes('/e'):
-                            command = '/e';
-                            break;
-                        case command.includes('/a'):
-                            command = '/a';
-                            break;
-                        case command.includes('/f'):
-                            command = '/f';
-                            break;
-                        case command.includes('/d'):
-                            command = '/d';
-                            break;
-                        case command.includes('/s'):
-                            command = '/s';
-                            break;
-                        case command.includes('/b'):
-                            command = '/b';
-                            break;
-                        case command.includes('/nobb'):
-                            command = '/nobb';
-                            break;
-                        case isCommandRegex.test(Content):
-                            command = '/h';
-                            break;
-                        default:
-                            break;
-                    }
-                    console.log('[INFO] 当前匹配到的 command 为：' + command)
 
-                    if (command === '/h' || command.includes('bb') || command === '/b' || command === '/nobb') {
-                        console.log('[INFO] 1001 调用 handleCommand 方法')
-                        replyMsg = await handleCommand(command, params, Content, FromUserName);
-                    } else {
-                        result = await tools.getUserConfig(FromUserName);
-                        if (result && result.get('isBinding')) {
-                            if (command === '/l' || command === '/s' || command === '/d' || command === '/e' || command === '/a' || command === '/f') {
-                                console.log('[INFO] 1002 调用 handleCommand 方法')
-                                replyMsg = await handleCommand(command, params, Content, FromUserName);
-                            } else {
-                                replyMsg = '未知指令，请回复 /h 获取帮助';
-                                console.log('[INFO] 5001 未知指令')
-                            }
-                        } else {
-                            replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                            console.log('[INFO] 1003 回复以下命令绑定用户')
-                        }
-                    }
-                } else {
-                    result = await tools.getUserConfig(FromUserName);
-                    if (result && result.get('isBinding')) {
-                        replyMsg = await newbbTalk(Content, MsgType);
-                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                    } else {
-                        // 未绑定用户，回复绑定指令
-                        replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                        console.log('[INFO] 1004 回复以下命令绑定用户');
-                    }
+        const messageData = xmlStr.xml;
+        logMessageInfo(messageData);
+
+        // 消息重复判断 - 使用 MsgId 和 MediaId 双重判断
+        if (messageData.MsgId === lastMsgId || 
+            (messageData.MediaId && await isMediaProcessed(messageData.MediaId))) {
+            logger.info('重复消息，已跳过处理');
+            return 'success';
+        }
+
+        // 对于媒体消息，先快速响应，然后异步处理
+        if (['image', 'video', 'voice'].includes(messageData.MsgType)) {
+            // 先标记该 MediaId 正在处理
+            await markMediaProcessing(messageData.MediaId);
+            
+            // 异步处理媒体文件
+            processMediaAsync(messageData, pageNum).catch(err => {
+                logger.error('异步处理媒体文件失败:', err);
+            });
+            
+            // 立即返回成功响应
+            return 'success';
+        }
+
+        // 其他消息同步处理
+        const replyMsg = await processMessage(messageData, pageNum);
+        return tools.encryptedXml(
+            replyMsg,
+            messageData.FromUserName,
+            messageData.ToUserName,
+            token,
+            encodingAesKey,
+            appId
+        );
+    } catch (err) {
+        logger.error('处理POST请求失败:', err);
+        return createResponse(500);
+    }
+}
+
+// 解析XML消息体
+async function parseXmlBody(body) {
+    try {
+        const parser = new xml2js.Parser({ 
+            explicitArray: false, 
+            ignoreAttrs: true 
+        });
+        return await parser.parseStringPromise(body.toString());
+    } catch (err) {
+        logger.error('解析XML消息体失败:', err);
+        throw err;
+    }
+}
+
+// 记录消息信息
+function logMessageInfo(messageData) {
+    const logFields = [
+        'ToUserName', 'FromUserName', 'CreateTime', 'MsgType',
+        'MediaId', 'Content', 'MsgId', 'PicUrl', 'Format',
+        'ThumbMediaId', 'Location_X', 'Location_Y', 'Scale',
+        'Label', 'Title', 'Description', 'Url'
+    ];
+
+    logFields.forEach(field => {
+        if (messageData[field]) {
+            logger.info(`${field}: ${messageData[field]}`);
+        }
+    });
+}
+
+// 处理不同类型的消息
+async function processMessage(messageData, pageNum) {
+    try {
+        const { MsgType, Event, Content, FromUserName } = messageData;
+
+        // 处理关注事件
+        if (MsgType === 'event') {
+            if (Event === 'subscribe') {
+                return '欢迎关注哔哔闪念！了解哔哔闪念搭建方法，请查阅： https://blog.guole.fun/posts/17745/';
+            }
+            return 'success';
+        }
+
+        // 处理不需要绑定的命令 - /h、/nobb、/b
+        if (MsgType === 'text') {
+            if (Content === '/h') {
+                return await handleCommand('/h', null, null, FromUserName);
+            }
+            if (Content === '/nobb') {
+                return await handleCommand('/nobb', null, null, FromUserName);
+            }
+            if (Content.startsWith('/b ')) {
+                return await handleCommand('/b', null, Content, FromUserName);
+            }
+        }
+
+        // 检查用户绑定状态 - 其他命令需要检查绑定状态
+        const userConfig = await tools.getUserConfig(FromUserName);
+        if (!userConfig?.get('isBinding')) {
+            return '您未完成绑定，无法使用该指令。回复以下命令绑定用户：/b 环境变量Binding_Key';
+        }
+
+        // 处理其他指令消息
+        if (MsgType === 'text' && Content.startsWith('/')) {
+            const [command, ...params] = Content.split(/\s+/);
+            return await handleCommand(command, params[0], Content, FromUserName);
+        }
+
+        // 处理其他类型消息
+        switch (MsgType) {
+            case 'text':
+                return await newbbTalk(Content, MsgType);
+                
+            case 'image':
+                return await handleImageMessage(messageData, pageNum);
+                
+            case 'voice':
+                return await handleVoiceMessage(messageData, pageNum);
+                
+            case 'video':
+            case 'shortvideo':
+                return await handleVideoMessage(messageData, pageNum);
+                
+            case 'location':
+                return await handleLocationMessage(messageData, pageNum);
+                
+            case 'link':
+                return await handleLinkMessage(messageData, pageNum);
+                
+            default:
+                return '暂不支持该类型消息';
                 }
             } catch (err) {
-                console.error(err);
-                if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
-                } else {
-                    replyMsg = '查询绑定状态请求出错，请稍后再试！'
-                }
-            }
-        } else if (MsgType === 'image') {
-            try {
-                result = await tools.getUserConfig(FromUserName);
-                if (result && result.get('isBinding')) {
-                    wechat_access_token = await tools.getAccessToken(appId, appSecret);
-                    console.log('[INFO] 当前获取到的 Access Token 为：' + wechat_access_token)
-                    fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
-                    mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
-                    await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-                    if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
-                        imgURL = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_ImagePath, mediaId, fileSuffix);
-                        text = `<img src="${imgURL}">`;
-                        replyMsg = await newbbTalk(imgURL, MsgType);
-                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                    } else if (mediaUrl && mediaId && Upload_Media_Method === 'qubu') {
-                        imgURL = await tools.uploadImageQubu(mediaId, fileSuffix);
-                        //text = `<img src="${imgURL}">`;
-                        replyMsg = await newbbTalk(imgURL, MsgType);
-                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                    } else {
-                        replyMsg = '云函数上传图片方式配置有误！可选 cos - 腾讯云存储桶；qubu - 去不图床';
-                    }
-                } else {
-                    replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1005 回复以下命令绑定用户')
-                }
-            } catch (err) {
-                console.error(err);
-                if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
-                } else {
-                    replyMsg = '查询绑定状态请求出错，请稍后再试！'
-                }
-            }
-        } else if (MsgType === 'voice') {
-            // try {
-            //     result = await tools.getUserConfig(FromUserName);
-            //     if (result && result.get('isBinding')) {
-            //         wechat_access_token = await tools.getAccessToken(appId, appSecret);
-            //         console.log('[INFO] 当前获取到的 Access Token 为：' + wechat_access_token)
-            //         fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
-            //         mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
-            //         if (fileSuffix === 'amr') {
-            //             // 下载文件并转换为 MP3 格式
-            //             await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-            //             console.log('[INFO] 音频文件已成功转换为 MP3 格式并保存到指定路径！');
-            //             if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
-            //                 const voiceUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
-            //                 replyMsg = await newbbTalk(voiceUrl, MsgType);
-            //                 await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-            //             } else {
-            //                 replyMsg = '云函数上传方式配置有误！音频消息仅支持上传方式为 cos 时处理';
-            //             }
-            //         } else {
-            //             replyMsg = '抱歉，暂不支持微信 speex 高清音频发布哔哔功能';
-            //         }
-            //     } else {
-            //         replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-            //         console.log('[INFO] 1006 回复以下命令绑定用户')
-            //     }
-            // } catch (err) {
-            //     console.error(err);
-            //     if (err.response) {
-            //         replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
-            //     } else {
-            //         replyMsg = '查询绑定状态请求出错，请稍后再试！'
-            //     }
-            // }
-            replyMsg = '抱歉，暂不支持哔哔发布微信语音！';
-        } else if (MsgType === 'video' || MsgType === 'shortvideo') {
-            try {
-                result = await tools.getUserConfig(FromUserName);
-                if (result && result.get('isBinding')) {
-                    wechat_access_token = await tools.getAccessToken(appId, appSecret);
-                    console.log('[INFO] 当前获取到的 Access Token 为：' + wechat_access_token)
-                    fileSuffix = await tools.getWechatMediaFileSuffix(wechat_access_token, mediaId);
-                    mediaUrl = 'https://api.weixin.qq.com/cgi-bin/media/get?access_token=' + wechat_access_token + '&media_id=' + mediaId;
-                    await tools.downloadMediaToTmp(mediaUrl, mediaId, fileSuffix);
-                    if (mediaUrl && mediaId && Upload_Media_Method === 'cos') {
-                        videoUrl = await tools.uploadMediaToCos(Tcb_Bucket, Tcb_Region, Tcb_MediaPath, mediaId, fileSuffix);
-                        //text = `<video src="${videoUrl}" controls></video>`;
-                        replyMsg = await newbbTalk(videoUrl, MsgType);
-                        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                    } else {
-                        replyMsg = '云函数上传方式配置有误！视频消息仅支持上传方式为 cos 时处理';
-                    }
-                } else {
-                    replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1007 回复以下命令绑定用户')
-                }
-            } catch (err) {
-                console.error(err);
-                if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
-                } else {
-                    replyMsg = '查询绑定状态请求出错，请稍后再试！'
-                }
-            }
-        } else if (MsgType === 'location') {
-            try {
-                result = await tools.getUserConfig(FromUserName);
-                if (result && result.get('isBinding')) {
-                    let { dom, script } = tools.gaodeMap(Scale, Label, Location_Y, Location_X)
-                    console.log(dom)
-                    console.log(script)
-                    dom = dom.replace(/\s+/g, ' ').trim();
-                    replyMsg = await newbbTalk(dom, MsgType, script);
-                    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                } else {
-                    replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1008 回复以下命令绑定用户')
-                }
-            } catch (err) {
-                console.error(err);
-                if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
-                } else {
-                    replyMsg = '查询绑定状态请求出错，请稍后再试！'
-                }
-            }
-        } else if (MsgType === 'link') {
-            try {
-                result = await tools.getUserConfig(FromUserName);
-                if (result && result.get('isBinding')) {
-                    if (!Description) Description = Url;
-                    text = `
-                            <a class="bbtalk-url" id="bbtalk-url" href="${Url}" title='${Title}' description='${Description}' rel="noopener noreferrer" target="_blank">
+        logger.error('处理消息失败:', err);
+        return tools.handleError(err);
+    }
+}
+
+// 处理图片消息
+async function handleImageMessage(messageData, pageNum) {
+    try {
+        if (Upload_Media_Method === 'cos') {
+            const access_token = await tools.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
+            const fileSuffix = await tools.getWechatMediaFileSuffix(access_token, messageData.MediaId);
+            
+            const imageUrl = await tools.uploadMediaToCos(
+                Tcb_Bucket,
+                Tcb_Region,
+                Tcb_ImagePath,
+                messageData.MediaId,
+                fileSuffix
+            );
+            // 直接使用URL作为内容
+            const replyMsg = await newbbTalk(imageUrl, 'image');
+            await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
+            return replyMsg;
+        } else if (Upload_Media_Method === 'qubu') {
+            const access_token = await tools.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
+            const fileSuffix = await tools.getWechatMediaFileSuffix(access_token, messageData.MediaId);
+            
+            const imageUrl = await tools.uploadImageQubu(messageData.MediaId, fileSuffix);
+            // 直接使用URL作为内容
+            const replyMsg = await newbbTalk(imageUrl, 'image');
+            await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
+            return replyMsg;
+        }
+        return '云函数上传方式配置有误！';
+    } catch (err) {
+        logger.error('处理图片消息失败:', err);
+        return tools.handleError(err);
+    }
+}
+
+// 处理语音消息
+async function handleVoiceMessage(messageData, pageNum) {
+    try {
+        if (Upload_Media_Method !== 'cos') {
+            return '云函数上传方式配置有误！语音消息仅支持上传方式为 cos 时处理';
+        }
+
+        const access_token = await tools.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
+        const fileSuffix = await tools.getWechatMediaFileSuffix(access_token, messageData.MediaId);
+
+        const voiceUrl = await tools.uploadMediaToCos(
+            Tcb_Bucket,
+            Tcb_Region,
+            Tcb_MediaPath,
+            messageData.MediaId,
+            fileSuffix
+        );
+        // 直接使用URL作为内容
+        const replyMsg = await newbbTalk(voiceUrl, 'voice');
+        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
+        return replyMsg;
+    } catch (err) {
+        logger.error('处理语音消息失败:', err);
+        return tools.handleError(err);
+    }
+}
+
+// 处理视频消息
+async function handleVideoMessage(messageData, pageNum) {
+    try {
+        if (Upload_Media_Method !== 'cos') {
+            return '云函数上传方式配置有误！视频消息仅支持上传方式为 cos 时处理';
+        }
+
+        const access_token = await tools.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
+        const fileSuffix = await tools.getWechatMediaFileSuffix(access_token, messageData.MediaId);
+
+        const videoUrl = await tools.uploadMediaToCos(
+            Tcb_Bucket,
+            Tcb_Region,
+            Tcb_MediaPath,
+            messageData.MediaId,
+            fileSuffix
+        );
+        // 直接使用URL作为内容
+        const replyMsg = await newbbTalk(videoUrl, messageData.MsgType);
+        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
+        return replyMsg;
+    } catch (err) {
+        logger.error('处理视频消息失败:', err);
+        return tools.handleError(err);
+    }
+}
+
+// 处理位置消息
+async function handleLocationMessage(messageData, pageNum) {
+    const { Scale, Label, Location_Y, Location_X } = messageData;
+    const { dom, script } = tools.gaodeMap(Scale, Label, Location_Y, Location_X);
+    const content = dom.replace(/\s+/g, ' ').trim();
+    const replyMsg = await newbbTalk(content, 'location', script);
+    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
+    return replyMsg;
+}
+
+// 处理链接消息
+async function handleLinkMessage(messageData, pageNum) {
+    const { Title, Description, Url } = messageData;
+    const desc = Description || Url;
+    const content = `
+        <a class="bbtalk-url" id="bbtalk-url" href="${Url}" title='${Title}' description='${desc}' rel="noopener noreferrer" target="_blank">
                                 <div class="bbtalk-url-info">
                                     <i class="fa-fw fa-solid fa-link"></i>
                                 </div>
                                 <div class="bbtalk-url-title">${Title}</div>
-                                <div class="bbtalk-url-desc">${Description}</div>
-                            </a>
-                            `;
-                    text = text.replace(/\s+/g, ' ').trim();
-                    replyMsg = await newbbTalk(text, MsgType);
-                    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true)
-                } else {
-                    replyMsg = '回复以下命令绑定用户 /b bb,预置的环境变量 Binding_Key';
-                    console.log('[INFO] 1009 回复以下命令绑定用户')
-                }
-            } catch (err) {
-                console.error(err);
-                if (err.response) {
-                    replyMsg = `HTTP Error: ${err.response.status}\n` + `Error Message: JSON.stringify(${err.response.data})`
-                } else {
-                    replyMsg = '查询绑定状态请求出错，请稍后再试！'
-                }
-            }
-        } else {
-            replyMsg = '暂不支持此类型消息';
+            <div class="bbtalk-url-desc">${desc}</div>
+        </a>
+    `.replace(/\s+/g, ' ').trim();
+    
+    const replyMsg = await newbbTalk(content, 'link');
+    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
+    return replyMsg;
+}
+
+// 创建统一的响应对象
+function createResponse(statusCode, body = '') {
+    return {
+        isBase64Encoded: false,
+        statusCode,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+        body: statusCode === 200 ? body : getStatusMessage(statusCode)
+    };
+}
+
+// 获取状态码对应的消息
+function getStatusMessage(statusCode) {
+    const messages = {
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        500: 'Internal Server Error'
+    };
+    return messages[statusCode] || 'Unknown Error';
+}
+
+// 检查媒体是否已处理
+async function isMediaProcessed(mediaId) {
+    try {
+        const query = new AV.Query('MediaProcessStatus');
+        query.equalTo('mediaId', mediaId);
+        const result = await query.first();
+        return !!result;
+    } catch (err) {
+        logger.error('检查媒体处理状态失败:', err);
+        return false;
+    }
+}
+
+// 标记媒体正在处理
+async function markMediaProcessing(mediaId) {
+    try {
+        const MediaProcessStatus = AV.Object.extend('MediaProcessStatus');
+        const status = new MediaProcessStatus();
+        status.set('mediaId', mediaId);
+        status.set('status', 'processing');
+        await status.save();
+        logger.info('标记媒体处理状态: {0}', mediaId);
+    } catch (err) {
+        logger.error('标记媒体处理状态失败:', err);
+    }
+}
+
+// 异步处理媒体文件
+async function processMediaAsync(messageData, pageNum) {
+    try {
+        let replyMsg;
+        switch (messageData.MsgType) {
+            case 'image':
+                replyMsg = await handleImageMessage(messageData, pageNum);
+                break;
+            case 'voice':
+                replyMsg = await handleVoiceMessage(messageData, pageNum);
+                break;
+            case 'video':
+            case 'shortvideo':
+                replyMsg = await handleVideoMessage(messageData, pageNum);
+                break;
+        }
+        
+        // 更新处理状态
+        const query = new AV.Query('MediaProcessStatus');
+        query.equalTo('mediaId', messageData.MediaId);
+        const status = await query.first();
+        if (status) {
+            status.set('status', 'completed');
+            status.set('result', replyMsg);
+            await status.save();
+        }
+        
+        logger.info('媒体文件处理完成: {0}', messageData.MediaId);
+    } catch (err) {
+        logger.error('异步处理媒体文件失败:', err);
+        // 更新失败状态
+        const query = new AV.Query('MediaProcessStatus');
+        query.equalTo('mediaId', messageData.MediaId);
+        const status = await query.first();
+        if (status) {
+            status.set('status', 'failed');
+            status.set('error', err.message);
+            await status.save();
         }
     }
-
-    // 超出微信允许最大长度截断，避免出现异常响应
-    const endingWord = '……';
-    const replyMsgByteLength = Buffer.byteLength(replyMsg, 'utf8')
-    const maxByteLength = 2047 - Buffer.byteLength(endingWord, 'utf8');
-    if (replyMsgByteLength > maxByteLength) {
-        const slicedMsg = tools.sliceByByte(replyMsg, maxByteLength);
-        replyMsg = slicedMsg + endingWord;
-    }
-    console.log('[INFO] replyMsgByteLength 为：' + replyMsgByteLength);
-    console.log('[INFO] maxByteLength 为：' + maxByteLength);
-
-    const response = tools.encryptedXml(replyMsg, FromUserName, ToUserName, token, encodingAesKey, appId)
-    lastMsgId = MsgId;
-    return response
 }
 
 module.exports = {
