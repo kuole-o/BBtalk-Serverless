@@ -1,11 +1,30 @@
 const xml2js = require('xml2js');
 const crypto = require('crypto');
+const AV = require('leanengine');
 const tools = require('./tools');
 const { handleCommand, newbbTalk } = require('./handleCommand');
 const { createLogger } = require('./utils/logger');
 const config = require('./config');
 
 const logger = createLogger('WechatMessage');
+
+// 消息ID缓存 - 使用 Map 存储消息ID和时间戳
+const messageCache = new Map();
+// 缓存清理间隔 (5分钟)
+const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000;
+// 消息缓存过期时间 (1分钟)
+const MESSAGE_EXPIRE_TIME = 60 * 1000;
+
+// 定期清理过期的消息缓存
+setInterval(() => {
+    const now = Date.now();
+    for (const [msgId, timestamp] of messageCache) {
+        if (now - timestamp > MESSAGE_EXPIRE_TIME) {
+            messageCache.delete(msgId);
+            logger.debug('清理过期消息ID: {0}', msgId);
+        }
+    }
+}, CACHE_CLEANUP_INTERVAL);
 
 // 从配置中获取环境变量
 const {
@@ -29,7 +48,7 @@ const {
 // 处理 GET 请求 - 微信服务器认证
 async function handleGetRequest(event) {
     try {
-        const { signature, timestamp, nonce, echostr } = event.queryString;
+    const { signature, timestamp, nonce, echostr } = event.queryString;
 
         // 验证必要参数
     if (!signature || !timestamp || !nonce || !echostr) {
@@ -41,7 +60,7 @@ async function handleGetRequest(event) {
         const tmpStr = crypto.createHash('sha1')
             .update([token, timestamp, nonce].sort().join(''))
             .digest('hex');
-            
+
         if (tmpStr !== signature) {
             logger.warn('签名验证失败');
             return createResponse(401);
@@ -67,25 +86,45 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
         const messageData = xmlStr.xml;
         logMessageInfo(messageData);
 
-        // 消息重复判断 - 使用 MsgId 和 MediaId 双重判断
-        if (messageData.MsgId === lastMsgId || 
-            (messageData.MediaId && await isMediaProcessed(messageData.MediaId))) {
-            logger.info('重复消息，已跳过处理');
+        // 检查消息是否重复
+        if (isMessageDuplicate(messageData.MsgId)) {
+            logger.info('重复消息，已跳过处理: {0}', messageData.MsgId);
             return 'success';
         }
 
-        // 对于媒体消息，先快速响应，然后异步处理
+        // 记录消息ID
+        cacheMessageId(messageData.MsgId);
+
+        // 对于媒体消息，先生成回复，然后异步处理上传
         if (['image', 'video', 'voice'].includes(messageData.MsgType)) {
-            // 先标记该 MediaId 正在处理
-            await markMediaProcessing(messageData.MediaId);
-            
+            // 生成回复消息
+            let replyMsg;
+            switch (messageData.MsgType) {
+                case 'image':
+                    replyMsg = '图片发送成功，正在上传处理...';
+                    break;
+                case 'voice':
+                    replyMsg = '语音发送成功，正在上传处理...';
+                    break;
+                case 'video':
+                    replyMsg = '视频发送成功，正在上传处理...';
+                    break;
+            }
+
             // 异步处理媒体文件
             processMediaAsync(messageData, pageNum).catch(err => {
                 logger.error('异步处理媒体文件失败:', err);
             });
-            
-            // 立即返回成功响应
-            return 'success';
+
+            // 立即返回回复消息
+            return tools.encryptedXml(
+                replyMsg,
+                messageData.FromUserName,
+                messageData.ToUserName,
+                token,
+                encodingAesKey,
+                appId
+            );
         }
 
         // 其他消息同步处理
@@ -104,12 +143,23 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
     }
 }
 
+// 检查消息是否重复
+function isMessageDuplicate(msgId) {
+    return messageCache.has(msgId);
+}
+
+// 缓存消息ID
+function cacheMessageId(msgId) {
+    messageCache.set(msgId, Date.now());
+    logger.debug('缓存消息ID: {0}', msgId);
+}
+
 // 解析XML消息体
 async function parseXmlBody(body) {
     try {
-        const parser = new xml2js.Parser({ 
-            explicitArray: false, 
-            ignoreAttrs: true 
+        const parser = new xml2js.Parser({
+            explicitArray: false,
+            ignoreAttrs: true
         });
         return await parser.parseStringPromise(body.toString());
     } catch (err) {
@@ -176,23 +226,23 @@ async function processMessage(messageData, pageNum) {
         switch (MsgType) {
             case 'text':
                 return await newbbTalk(Content, MsgType);
-                
+
             case 'image':
                 return await handleImageMessage(messageData, pageNum);
-                
+
             case 'voice':
                 return await handleVoiceMessage(messageData, pageNum);
-                
+
             case 'video':
             case 'shortvideo':
                 return await handleVideoMessage(messageData, pageNum);
-                
+
             case 'location':
                 return await handleLocationMessage(messageData, pageNum);
-                
+
             case 'link':
                 return await handleLinkMessage(messageData, pageNum);
-                
+
             default:
                 return '暂不支持该类型消息';
                 }
@@ -208,7 +258,7 @@ async function handleImageMessage(messageData, pageNum) {
         if (Upload_Media_Method === 'cos') {
             const access_token = await tools.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
             const fileSuffix = await tools.getWechatMediaFileSuffix(access_token, messageData.MediaId);
-            
+
             const imageUrl = await tools.uploadMediaToCos(
                 Tcb_Bucket,
                 Tcb_Region,
@@ -223,7 +273,7 @@ async function handleImageMessage(messageData, pageNum) {
         } else if (Upload_Media_Method === 'qubu') {
             const access_token = await tools.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
             const fileSuffix = await tools.getWechatMediaFileSuffix(access_token, messageData.MediaId);
-            
+
             const imageUrl = await tools.uploadImageQubu(messageData.MediaId, fileSuffix);
             // 直接使用URL作为内容
             const replyMsg = await newbbTalk(imageUrl, 'image');
@@ -231,7 +281,7 @@ async function handleImageMessage(messageData, pageNum) {
             return replyMsg;
         }
         return '云函数上传方式配置有误！';
-    } catch (err) {
+            } catch (err) {
         logger.error('处理图片消息失败:', err);
         return tools.handleError(err);
     }
@@ -258,7 +308,7 @@ async function handleVoiceMessage(messageData, pageNum) {
         const replyMsg = await newbbTalk(voiceUrl, 'voice');
         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
         return replyMsg;
-    } catch (err) {
+            } catch (err) {
         logger.error('处理语音消息失败:', err);
         return tools.handleError(err);
     }
@@ -285,7 +335,7 @@ async function handleVideoMessage(messageData, pageNum) {
         const replyMsg = await newbbTalk(videoUrl, messageData.MsgType);
         await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
         return replyMsg;
-    } catch (err) {
+            } catch (err) {
         logger.error('处理视频消息失败:', err);
         return tools.handleError(err);
     }
@@ -314,7 +364,7 @@ async function handleLinkMessage(messageData, pageNum) {
             <div class="bbtalk-url-desc">${desc}</div>
         </a>
     `.replace(/\s+/g, ' ').trim();
-    
+
     const replyMsg = await newbbTalk(content, 'link');
     await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, pageNum, PageSize, true);
     return replyMsg;
@@ -340,72 +390,36 @@ function getStatusMessage(statusCode) {
     return messages[statusCode] || 'Unknown Error';
 }
 
-// 检查媒体是否已处理
-async function isMediaProcessed(mediaId) {
-    try {
-        const query = new AV.Query('MediaProcessStatus');
-        query.equalTo('mediaId', mediaId);
-        const result = await query.first();
-        return !!result;
-    } catch (err) {
-        logger.error('检查媒体处理状态失败:', err);
-        return false;
-    }
-}
-
-// 标记媒体正在处理
-async function markMediaProcessing(mediaId) {
-    try {
-        const MediaProcessStatus = AV.Object.extend('MediaProcessStatus');
-        const status = new MediaProcessStatus();
-        status.set('mediaId', mediaId);
-        status.set('status', 'processing');
-        await status.save();
-        logger.info('标记媒体处理状态: {0}', mediaId);
-    } catch (err) {
-        logger.error('标记媒体处理状态失败:', err);
-    }
-}
-
 // 异步处理媒体文件
 async function processMediaAsync(messageData, pageNum) {
     try {
-        let replyMsg;
+        // 检查用户绑定状态
+        const userConfig = await tools.getUserConfig(messageData.FromUserName);
+        if (!userConfig?.get('isBinding')) {
+            logger.warn('用户未绑定，跳过媒体处理');
+            return;
+        }
+
+        // 处理媒体文件上传
         switch (messageData.MsgType) {
             case 'image':
-                replyMsg = await handleImageMessage(messageData, pageNum);
+                await handleImageMessage(messageData, pageNum);
                 break;
             case 'voice':
-                replyMsg = await handleVoiceMessage(messageData, pageNum);
+                await handleVoiceMessage(messageData, pageNum);
                 break;
             case 'video':
             case 'shortvideo':
-                replyMsg = await handleVideoMessage(messageData, pageNum);
+                await handleVideoMessage(messageData, pageNum);
                 break;
         }
-        
-        // 更新处理状态
-        const query = new AV.Query('MediaProcessStatus');
-        query.equalTo('mediaId', messageData.MediaId);
-        const status = await query.first();
-        if (status) {
-            status.set('status', 'completed');
-            status.set('result', replyMsg);
-            await status.save();
-        }
-        
+
+        // 更新所有分页 JSON 文件
+        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, 1, PageSize, true);
         logger.info('媒体文件处理完成: {0}', messageData.MediaId);
     } catch (err) {
         logger.error('异步处理媒体文件失败:', err);
-        // 更新失败状态
-        const query = new AV.Query('MediaProcessStatus');
-        query.equalTo('mediaId', messageData.MediaId);
-        const status = await query.first();
-        if (status) {
-            status.set('status', 'failed');
-            status.set('error', err.message);
-            await status.save();
-        }
+        logger.error(err);
     }
 }
 
