@@ -260,29 +260,41 @@ async function processDeleteAsync(params, cacheKey) {
         if (results[index]) {
             const object = results[index];
             const content = object.get('content');
-            logger.info('准备删除内容: {0}', content);
+            const msgType = object.get('MsgType');
+            logger.info('准备删除内容: {0}, 类型: {1}', content, msgType);
 
-            // 检查是否需要删除关联的媒体文件
-            const mediaUrl = tools.extractMediaUrl(content);
-            if (mediaUrl) {
-                await tools.deleteMediaFile(mediaUrl);
+            // 只有媒体类型的内容才需要删除关联文件
+            if (['image', 'video', 'voice'].includes(msgType)) {
+                const mediaUrl = tools.extractMediaUrl(content);
+                if (mediaUrl) {
+                    await tools.deleteMediaFile(mediaUrl);
+                    logger.info('已删除关联媒体文件: {0}', mediaUrl);
+                }
             }
 
+            // 删除数据库记录
             await object.destroy();
+            logger.info('已删除数据库记录');
+
+            // 更新分页 JSON 文件
             await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, 1, PageSize, true);
+            logger.info('已更新分页 JSON 文件');
             
             // 更新缓存状态
             deleteStatusCache.set(cacheKey, {
                 completed: true,
-                result: '删除成功'
+                result: '删除成功',
+                timestamp: Date.now()  // 添加时间戳用于过期清理
             });
         } else {
             deleteStatusCache.set(cacheKey, {
                 completed: true,
-                result: '无效的序号'
+                result: '无效的序号',
+                timestamp: Date.now()
             });
         }
     } catch (err) {
+        logger.error('删除操作失败:', err);
         throw err;
     }
 }
