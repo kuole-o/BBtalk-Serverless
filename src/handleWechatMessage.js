@@ -86,14 +86,29 @@ async function handlePostRequest(event, lastMsgId, pageNum) {
         const messageData = xmlStr.xml;
         logMessageInfo(messageData);
 
-        // 检查消息是否重复
+        // 处理事件消息
+        if (messageData.MsgType === 'event') {
+            const replyMsg = await processMessage(messageData, pageNum);
+            return tools.encryptedXml(
+                replyMsg,
+                messageData.FromUserName,
+                messageData.ToUserName,
+                token,
+                encodingAesKey,
+                appId
+            );
+        }
+
+        // 检查消息是否重复 (仅对非事件消息)
         if (isMessageDuplicate(messageData.MsgId)) {
             logger.info('重复消息，已跳过处理: {0}', messageData.MsgId);
             return 'success';
         }
 
-        // 记录消息ID
-        cacheMessageId(messageData.MsgId);
+        // 记录消息ID (仅对非事件消息)
+        if (messageData.MsgId) {
+            cacheMessageId(messageData.MsgId);
+        }
 
         // 对于媒体消息，先生成回复，然后异步处理上传
         if (['image', 'video', 'voice'].includes(messageData.MsgType)) {
@@ -193,8 +208,11 @@ async function processMessage(messageData, pageNum) {
         if (MsgType === 'event') {
             if (Event === 'subscribe') {
                 return '欢迎关注哔哔闪念！了解哔哔闪念搭建方法，请查阅： https://blog.guole.fun/posts/17745/';
+            } else if (Event === 'unsubscribe') {
+                return '您已取消关注，期待下次再见！';
+            } else {    
+                return 'success';
             }
-            return 'success';
         }
 
         // 处理不需要绑定的命令 - /h、/nobb、/b
