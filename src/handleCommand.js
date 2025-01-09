@@ -109,8 +109,8 @@ const commandHandlers = {
         return tools.generateReplyMsg('list', results);
     },
 
-    '/s': async (_, Content) => {
-        const searchContent = Content.match(/^\/s\s*(.*)$/i)?.[1];
+    '/s': async (params, Content) => {
+        const searchContent = Content.replace(/^\/s\s*\d*\s*/, '').trim();
         if (!searchContent) {
             return '❌️ 无效的指令，请输入 /s 关键词查询';
         }
@@ -119,8 +119,10 @@ const commandHandlers = {
         return tools.generateReplyMsg('search', results, searchContent);
     },
 
-    '/d': async (params, Content) => {
-        if (!params || isNaN(params)) {
+    '/d': async (params) => {
+        if (!params) params = 1;
+
+        if (isNaN(params)) {
             return '❌️ 无效的指令，请输入 /d 数字以删除指定闪念';
         }
 
@@ -138,18 +140,21 @@ const commandHandlers = {
     },
 
     '/a': async (params, Content) => {
+        if (!params) params = 1;
+
         if (!Content) {
             return '❌️ 无效的指令，请输入 "/a 内容"，追加内容到第 1 条';
         }
 
         try {
-            const results = await queryContent(params || 1);
+            const results = await queryContent(params);
             const index = params ? params - 1 : 0;
             if (results[index]) {
                 const object = results[index];
                 const oldContent = object.get('content');
-                await updateContent(object, oldContent + Content, false);
-                return `已追加文本到第 ${params || 1} 条`;
+                const contentToAppend = Content.replace(/^\/a\s*\d*\s*/, '');
+                await updateContent(object, oldContent + contentToAppend, false);
+                return `已追加文本到第 ${params} 条`;
             }
             return '❌️ 无效的序号';
         } catch (err) {
@@ -159,18 +164,21 @@ const commandHandlers = {
     },
 
     '/f': async (params, Content) => {
+        if (!params) params = 1;
+
         if (!Content) {
             return '❌️ 无效的指令，请输入 "/f 内容"，插入内容到第 1 条';
         }
 
         try {
-            const results = await queryContent(params || 1);
+            const results = await queryContent(params);
             const index = params ? params - 1 : 0;
             if (results[index]) {
                 const object = results[index];
                 const oldContent = object.get('content');
-                await updateContent(object, Content + oldContent, false);
-                return `👀 已插入文本到第 ${params || 1} 条`;
+                const contentToInsert = Content.replace(/^\/f\s*\d*\s*/, '');
+                await updateContent(object, contentToInsert + oldContent, false);
+                return `👀 已插入文本到第 ${params} 条`;
             }
             return '❌️ 无效的序号';
         } catch (err) {
@@ -180,16 +188,19 @@ const commandHandlers = {
     },
 
     '/e': async (params, Content) => {
+        if (!params) params = 1;
+
         if (!Content) {
             return '❌️ 无效的指令，请回复 /h 获取帮助';
         }
 
         try {
-            const results = await queryContent(params || 1);
+            const results = await queryContent(params);
             if (results[params - 1]) {
                 const object = results[params - 1];
-                await updateContent(object, Content, false);
-                return `👀 已修改第 ${params} 条内容为：${Content}`;
+                const contentToUpdate = Content.replace(/^\/e\s*\d*\s*/, '');
+                await updateContent(object, contentToUpdate, false);
+                return `👀 已修改第 ${params} 条内容为：${contentToUpdate}`;
             }
             return '❌️ 无效的序号';
         } catch (err) {

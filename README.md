@@ -9,6 +9,12 @@ https://blog.guole.fun/bb/ 的配套微信公众号发布云函数
 ## 更新日志
 
 <details>
+<summary>v1.1.0</summary>
+  * 增强：调整逻辑，支持无空格命令格式（如 /l3, /e1ok）； <br> 
+  * 增强：新增关注公众号欢迎语，优化相关通知文案，更友好； <br> 
+  * 增强：优化代码结构，引入缓存机制，解决微信 5s 超时重试时，消息可能重复处理的问题； <br> 
+</details>
+
 <summary>v1.0.9</summary>
   * 增强：完成项目重构，代码逻辑更清晰、高效。由 [Cursor](https://www.cursor.com/) 提供技术支持 <br> 
 </details>

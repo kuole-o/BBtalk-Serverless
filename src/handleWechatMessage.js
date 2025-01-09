@@ -277,7 +277,7 @@ async function processMessageAsync(messageData, pageNum) {
 
             // 处理命令
             if (content.startsWith('/')) {
-                // 1. 使用正则表达式匹配无空格命令格式
+                // 1. 先尝试解析无空格格式的命令（如 /l3, /e1ok）
                 const noSpaceCommandRegex = /^(\/[a-z])(\d+)(.*)$/i;
                 const match = content.match(noSpaceCommandRegex);
 
@@ -300,7 +300,8 @@ async function processMessageAsync(messageData, pageNum) {
                             if (!contentPart) {
                                 replyMsg = `❌️ 无效的指令，请输入 "${actualCommand} ${actualParams} 内容"`;
                             } else {
-                                replyMsg = await handleCommand(actualCommand, actualParams, content, FromUserName);
+                                // 将完整内容传递给命令处理器
+                                replyMsg = await handleCommand(actualCommand, actualParams, contentPart, FromUserName);
                             }
                         } else {
                             // 其他命令直接处理
@@ -314,23 +315,23 @@ async function processMessageAsync(messageData, pageNum) {
                     }
                 }
 
-                // 2. 处理正常的空格分隔命令格式
-                const spaceCommandRegex = /^(\/[a-z])\s+(\d+)(?:\s+(.*))?$/i;
-                const spaceMatch = content.match(spaceCommandRegex);
+                // 2. 如果不是无空格格式，则解析常规格式
+                const [command, ...params] = content.split(/\s+/);
+                const numericParam = params[0] ? parseInt(params[0]) : null;
 
-                if (spaceMatch) {
-                    const [, command, numStr, remainingContent] = spaceMatch;
-                    const params = parseInt(numStr);
-
-                    // 对于需要内容的命令，检查内容是否存在
-                    if (['/a', '/f', '/e'].includes(command) && !remainingContent) {
-                        replyMsg = `❌️ 无效的指令，请输入 "${command} ${params} 内容"`;
+                // 3. 根据命令类型分别处理
+                if (['/l', '/a', '/f', '/e', '/d'].includes(command)) {
+                    // 处理需要参数的命令
+                    if (isNaN(numericParam)) {
+                        // 如果参数不是数字，将整个参数部分作为内容传递
+                        replyMsg = await handleCommand(command, 1, params.join(' '), FromUserName);
                     } else {
-                        replyMsg = await handleCommand(command, params, content, FromUserName);
+                        // 如果参数是数字，将剩余部分作为内容传递
+                        const remainingContent = params.slice(1).join(' ');
+                        replyMsg = await handleCommand(command, numericParam, remainingContent, FromUserName);
                     }
                 } else {
-                    // 3. 处理不带参数的命令 (如 /h, /nobb)
-                    const [command, ...params] = content.split(/\s+/);
+                    // 处理不带参数的命令 (如 /h, /nobb)
                     replyMsg = await handleCommand(command, params[0], content, FromUserName);
                 }
             } else {
