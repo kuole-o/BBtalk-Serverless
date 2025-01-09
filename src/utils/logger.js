@@ -63,6 +63,11 @@ class Logger {
   error(message, ...args) {
     this._log(LogLevel.ERROR, message, ...args);
   }
+
+  perf(message, startTime, ...args) {
+    const duration = Date.now() - startTime;
+    this._log(LogLevel.INFO, `${message} (耗时: ${duration}ms)`, ...args);
+  }
 }
 
 module.exports = {

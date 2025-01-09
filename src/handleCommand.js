@@ -31,13 +31,14 @@ async function queryContent(params = 1) {
 }
 
 // 抽取通用的内容更新方法
-async function updateContent(object, content) {
+async function updateContent(object, content, isRecursive = false) {
     object.set('content', content);
     await object.save();
-    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, 1, PageSize, true);
+    await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, 1, PageSize, isRecursive);
 }
 
 async function handleCommand(command, params, Content, FromUserName) {
+    const startTime = Date.now();
     try {
         // 处理特殊命令
         if (command === '/nobb') {
@@ -56,7 +57,7 @@ async function handleCommand(command, params, Content, FromUserName) {
                         // 从原始Content中提取实际内容部分
                         const contentPart = Content.substring(command.length).trim();
                         if (!contentPart) {
-                            return `无效的指令，请输入 "${actualCommand} ${actualParams} 内容"`;
+                            return `❌️ 无效的指令，请输入 "${actualCommand} ${actualParams} 内容"`;
                         }
                         return await commandHandlers[actualCommand](actualParams, contentPart, FromUserName);
                     }
@@ -69,17 +70,15 @@ async function handleCommand(command, params, Content, FromUserName) {
         // 处理正常的空格分隔命令格式
         const handler = commandHandlers[command];
         if (!handler) {
-            return '无效的指令，请回复 /h 获取帮助';
+            return '❌️ 无效的指令，请回复 /h 获取帮助';
         }
 
         return await handler(params, Content, FromUserName);
-                } catch (err) {
+    } catch (err) {
+        logger.perf(`处理命令 ${command} 失败`, startTime);
         return tools.handleError(err);
     }
 }
-
-// 在文件顶部添加删除状态缓存
-const deleteStatusCache = new Map();
 
 const commandHandlers = {
     '/h': async () => {
@@ -113,56 +112,34 @@ const commandHandlers = {
     '/s': async (_, Content) => {
         const searchContent = Content.match(/^\/s\s*(.*)$/i)?.[1];
         if (!searchContent) {
-            return '无效的指令，请输入 /s 关键词查询';
+            return '❌️ 无效的指令，请输入 /s 关键词查询';
         }
 
         const results = await contentService.searchContent(searchContent);
         return tools.generateReplyMsg('search', results, searchContent);
     },
 
-    '/d': async (params, _, FromUserName) => {
-        if (!params) {
-            return '无效的参数，请输入 /d 数字以删除指定哔哔';
+    '/d': async (params, Content) => {
+        if (!params || isNaN(params)) {
+            return '❌️ 无效的指令，请输入 /d 数字以删除指定闪念';
         }
 
+        const cacheKey = `delete_${Date.now()}`;
+        tools.setProcessingStatus('command', cacheKey, { done: false });
+
         try {
-            // 检查是否正在处理中
-            const cacheKey = `${FromUserName}_${params}`;
-            const status = deleteStatusCache.get(cacheKey);
-
-            if (status) {
-                if (status.completed) {
-                    // 删除已完成，返回结果
-                    deleteStatusCache.delete(cacheKey);
-                    return status.result || '删除成功';
-                } else {
-                    // 仍在处理中
-                    return 'success';
-                }
-            }
-
-            // 第一次处理，先返回消息
-            deleteStatusCache.set(cacheKey, { completed: false });
-            
-            // 异步处理删除操作
-            processDeleteAsync(params, cacheKey).catch(err => {
-                logger.error('异步删除内容失败:', err);
-                deleteStatusCache.set(cacheKey, {
-                    completed: true,
-                    result: tools.handleError(err)
-                });
-            });
-
-            return '正在删除，请稍候...';
+            await processDeleteAsync(params, cacheKey);
+            const status = tools.getProcessingStatus('command', cacheKey);
+            return status?.result || '❌️ 删除失败';
         } catch (err) {
-            logger.error('删除内容失败:', err);
+            logger.error('删除命令执行失败:', err);
             return tools.handleError(err);
         }
     },
 
     '/a': async (params, Content) => {
         if (!Content) {
-            return '无效的指令，请输入 "/a 内容"，追加内容到第 1 条';
+            return '❌️ 无效的指令，请输入 "/a 内容"，追加内容到第 1 条';
         }
 
         try {
@@ -171,11 +148,11 @@ const commandHandlers = {
             if (results[index]) {
                 const object = results[index];
                 const oldContent = object.get('content');
-                await updateContent(object, oldContent + Content);
+                await updateContent(object, oldContent + Content, false);
                 return `已追加文本到第 ${params || 1} 条`;
             }
-            return '无效的序号';
-                        } catch (err) {
+            return '❌️ 无效的序号';
+        } catch (err) {
             logger.error('追加内容失败:', err);
             return tools.handleError(err);
         }
@@ -183,7 +160,7 @@ const commandHandlers = {
 
     '/f': async (params, Content) => {
         if (!Content) {
-            return '无效的指令，请输入 "/f 内容"，插入内容到第 1 条';
+            return '❌️ 无效的指令，请输入 "/f 内容"，插入内容到第 1 条';
         }
 
         try {
@@ -192,11 +169,11 @@ const commandHandlers = {
             if (results[index]) {
                 const object = results[index];
                 const oldContent = object.get('content');
-                await updateContent(object, Content + oldContent);
-                return `已插入文本到第 ${params || 1} 条`;
+                await updateContent(object, Content + oldContent, false);
+                return `👀 已插入文本到第 ${params || 1} 条`;
             }
-            return '无效的序号';
-                } catch (err) {
+            return '❌️ 无效的序号';
+        } catch (err) {
             logger.error('插入内容失败:', err);
             return tools.handleError(err);
         }
@@ -204,17 +181,17 @@ const commandHandlers = {
 
     '/e': async (params, Content) => {
         if (!Content) {
-            return '无效的指令，请回复 /h 获取帮助';
+            return '❌️ 无效的指令，请回复 /h 获取帮助';
         }
 
         try {
             const results = await queryContent(params || 1);
             if (results[params - 1]) {
                 const object = results[params - 1];
-                await updateContent(object, Content);
-                return `已修改第 ${params} 条内容为：${Content}`;
+                await updateContent(object, Content, false);
+                return `👀 已修改第 ${params} 条内容为：${Content}`;
             }
-            return '无效的序号';
+            return '❌️ 无效的序号';
         } catch (err) {
             logger.error('修改内容失败:', err);
             return tools.handleError(err);
@@ -228,7 +205,7 @@ const commandHandlers = {
         if (key === Binding_Key) {
             try {
                 await tools.bindUser(FromUserName);
-                return '绑定成功，直接发「文字」或「图片」试试吧！\n---------------\n回复 /h 获取更多秘笈';
+                return '🎉 绑定成功，直接发「文字」或「图片」试试吧！\n---------------\n回复 /h 获取更多秘笈';
             } catch (err) {
                 logger.error('绑定用户失败:', err);
                 return tools.handleError(err);
@@ -236,14 +213,14 @@ const commandHandlers = {
         }
 
         logger.warn('绑定校验不通过, 用户: {0}', FromUserName);
-        return '本次绑定校验不通过，请回复以下命令绑定用户：/b 环境变量Binding_Key';
+        return '❌️ 本次绑定校验不通过，请回复以下命令绑定用户：/b 环境变量Binding_Key';
     },
 
     '/nobb': async (FromUserName) => {
         try {
             const result = await tools.unbindUser(FromUserName);
-            return result ? '您已成功解除绑定' :
-                '您还未绑定，无需解除绑定。回复以下命令绑定用户：/b 环境变量Binding_Key';
+            return result ? '✅ 您已成功解除绑定' :
+                '❌️ 您还未绑定，无需解除绑定。回复以下命令绑定用户：/b 环境变量Binding_Key';
         } catch (err) {
             logger.error('解除绑定失败:', err);
             return tools.handleError(err);
@@ -253,6 +230,7 @@ const commandHandlers = {
 
 // 异步处理删除操作
 async function processDeleteAsync(params, cacheKey) {
+    const startTime = Date.now();
     try {
         const results = await queryContent(params);
         const index = params - 1;
@@ -267,8 +245,12 @@ async function processDeleteAsync(params, cacheKey) {
             if (['image', 'video', 'voice'].includes(msgType)) {
                 const mediaUrl = tools.extractMediaUrl(content);
                 if (mediaUrl) {
-                    await tools.deleteMediaFile(mediaUrl);
-                    logger.info('已删除关联媒体文件: {0}', mediaUrl);
+                    try {
+                        await tools.deleteMediaFile(mediaUrl);
+                        logger.info('已删除关联媒体文件: {0}', mediaUrl);
+                    } catch (err) {
+                        logger.error('删除媒体文件失败，继续删除数据库记录:', err);
+                    }
                 }
             }
 
@@ -279,41 +261,35 @@ async function processDeleteAsync(params, cacheKey) {
             // 更新分页 JSON 文件
             await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, 1, PageSize, true);
             logger.info('已更新分页 JSON 文件');
-            
+
             // 更新缓存状态
-            deleteStatusCache.set(cacheKey, {
-                completed: true,
-                result: '删除成功',
-                timestamp: Date.now()  // 添加时间戳用于过期清理
+            tools.setProcessingStatus('command', cacheKey, {
+                done: true,
+                result: '✅ 删除成功',
+                timestamp: Date.now()
             });
+
+            logger.perf('删除操作完成', startTime);
         } else {
-            deleteStatusCache.set(cacheKey, {
-                completed: true,
-                result: '无效的序号',
+            tools.setProcessingStatus('command', cacheKey, {
+                done: true,
+                result: '❌️ 无效的序号',
                 timestamp: Date.now()
             });
         }
     } catch (err) {
         logger.error('删除操作失败:', err);
+        tools.setProcessingStatus('command', cacheKey, {
+            done: true,
+            result: tools.handleError(err),
+            timestamp: Date.now()
+        });
         throw err;
     }
 }
 
-// 添加定期清理过期的删除状态缓存
-const DELETE_CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5分钟
-const DELETE_CACHE_EXPIRE_TIME = 60 * 1000; // 1分钟
-
-setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of deleteStatusCache) {
-        if (value.timestamp && now - value.timestamp > DELETE_CACHE_EXPIRE_TIME) {
-            deleteStatusCache.delete(key);
-            logger.debug('清理过期删除状态缓存: {0}', key);
-        }
-    }
-}, DELETE_CACHE_CLEANUP_INTERVAL);
-
 async function newbbTalk(Content, MsgType, Script = '') {
+    const startTime = Date.now();
     logger.info('发布新内容, 类型: {0}', MsgType);
 
     try {
@@ -330,11 +306,8 @@ async function newbbTalk(Content, MsgType, Script = '') {
 
         if (!response) {
             logger.error('发布失败, 响应:', response);
-            return '哔哔失败！' + response.data;
+            return '❌️ 哔哔失败！' + response.data;
         }
-
-        // 更新所有分页 JSON 文件
-        await tools.queryContentByPage(Tcb_Bucket, Tcb_Region, Tcb_JsonPath, 1, PageSize, true);
 
         // 统一的提示信息
         const baseMsg = '使用 /f 指令可原内容前插入文字';
@@ -343,31 +316,32 @@ async function newbbTalk(Content, MsgType, Script = '') {
 
         switch (MsgType) {
             case 'image':
-                return `发图哔哔成功（${baseMsg}）${divider}${Content}`;
-                
+                return `👀 发图哔哔成功（${baseMsg}）${divider}${Content}`;
+
             case 'voice':
-                return `发语音哔哔成功${divider}${baseMsg}`;
-                
+                return `👀 发语音哔哔成功${divider}${baseMsg}`;
+
             case 'video':
-                return `发视频哔哔成功${divider}${baseMsg}`;
-                
+                return `👀 发视频哔哔成功${divider}${baseMsg}`;
+
             case 'shortvideo':
-                return `发小视频哔哔成功${divider}${baseMsg}`;
-                
+                return `👀 发小视频哔哔成功${divider}${baseMsg}`;
+
             case 'location':
-                return `发位置哔哔成功${divider}${baseMsg}`;
-                
+                return `👀 发位置哔哔成功${divider}${baseMsg}`;
+
             case 'link':
-                return `发链接哔哔成功${divider}${baseMsg}`;
-                
+                return `👀 发链接哔哔成功${divider}${baseMsg}`;
+
             case 'text':
-                return `哔哔成功${divider}${baseMsg}${appendMsg}`;
-                
-                default:
-                return `发布${MsgType}类型内容成功${divider}${baseMsg}${appendMsg}`;
+                return `✌️ 哔哔成功${divider}${baseMsg}${appendMsg}`;
+
+            default:
+                return `👀 发布${MsgType}类型内容成功${divider}${baseMsg}${appendMsg}`;
         }
     } catch (err) {
         logger.error('发布内容失败:', err);
+        logger.perf(`发布${MsgType}类型内容失败`, startTime);
         return tools.handleError(err);
     }
 }

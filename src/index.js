@@ -31,7 +31,7 @@ exports.main_handler = async (event, context) => {
                 isBase64Encoded: false,
                 statusCode: 200,
                 headers: { "Content-Type": "text/plain; charset=utf-8" },
-                body: "Success 触发云函数成功！"
+                body: "✅ 定时任务成功激活云函数！"
             };
         } else {
             return {
@@ -48,7 +48,7 @@ exports.main_handler = async (event, context) => {
             content_text = await handleGetRequest(event);
         } else if (httpMethod === 'POST' && body) {
             const pageNum = 1; // 可以根据需要传递或修改
-            content_text = await handlePostRequest(event, null, pageNum);
+            content_text = await handlePostRequest(event, pageNum);
         }
 
         response = {
@@ -64,7 +64,7 @@ exports.main_handler = async (event, context) => {
             isBase64Encoded: false,
             statusCode: 500,
             headers: { "Content-Type": "text/plain; charset=utf-8" },
-            body: "Internal Server Error"
+            body: "❌️ 处理消息失败"
         };
     }
 }

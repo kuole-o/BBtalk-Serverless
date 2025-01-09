@@ -19,6 +19,113 @@ const tools = {
   access_token: '',
   token_expire_time: 0,
 
+  mediaProcessingStatus: new Map(),
+  commandProcessingStatus: new Map(),
+
+  get maxRetries() {
+    return config.MessageProcessing.MaxRetries;
+  },
+
+  get maxStatusCount() {
+    return config.MessageProcessing.MaxStatusCount;
+  },
+
+  get statusExpireTime() {
+    return config.MessageProcessing.StatusExpireTime;
+  },
+
+  get statusCleanupInterval() {
+    return config.MessageProcessing.CleanupInterval;
+  },
+
+  // 添加状态跟踪相关的方法
+  async setProcessingStatus(type, key, status) {
+    const statusMap = type === 'media' ? this.mediaProcessingStatus : this.commandProcessingStatus;
+
+    // 检查状态数量是否超出限制
+    if (statusMap.size >= this.maxStatusCount) {
+      logger.warn('状态数量超出限制，执行清理');
+      this.cleanupOldestStatus(statusMap);
+    }
+
+    const oldStatus = statusMap.get(key);
+    const retries = oldStatus ? oldStatus.retries + 1 : 1;
+
+    // 保存新状态
+    const newStatus = {
+      ...status,
+      timestamp: Date.now(),
+      retries: retries,
+      done: status.done
+    };
+    statusMap.set(key, newStatus);
+
+    logger.debug(
+      '状态更新 - 类型: {0}, 键: {1}, 完成: {2}, 重试: {3}',
+      type,
+      key,
+      status.done,
+      retries
+    );
+
+    // 如果是第三次尝试且仍未完成，记录警告日志
+    if (retries >= this.maxRetries && !status.done) {
+      logger.warn('消息处理达到最大重试次数: {0}', key);
+    }
+  },
+
+  // 清理最旧的状态
+  cleanupOldestStatus(statusMap) {
+    const now = Date.now();
+    let oldestKey = null;
+    let oldestTime = now;
+
+    for (const [key, value] of statusMap) {
+      if (value.timestamp < oldestTime) {
+        oldestTime = value.timestamp;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      statusMap.delete(oldestKey);
+      logger.debug('清理最旧状态: {0}', oldestKey);
+    }
+  },
+
+  getProcessingStatus(type, key) {
+    const statusMap = type === 'media' ? this.mediaProcessingStatus : this.commandProcessingStatus;
+    return statusMap.get(key);
+  },
+
+  deleteProcessingStatus(type, key) {
+    const statusMap = type === 'media' ? this.mediaProcessingStatus : this.commandProcessingStatus;
+    statusMap.delete(key);
+  },
+
+  // 启动状态清理定时器
+  startStatusCleanup() {
+    setInterval(() => {
+      const now = Date.now();
+
+      // 清理媒体处理状态
+      for (const [key, value] of this.mediaProcessingStatus) {
+        if (now - value.timestamp > this.statusExpireTime) {
+          this.mediaProcessingStatus.delete(key);
+          logger.debug('清理过期媒体处理状态: {0}', key);
+        }
+      }
+
+      // 清理命令处理状态
+      for (const [key, value] of this.commandProcessingStatus) {
+        if (now - value.timestamp > this.statusExpireTime) {
+          this.commandProcessingStatus.delete(key);
+          logger.debug('清理过期命令处理状态: {0}', key);
+        }
+      }
+    }, this.statusCleanupInterval);
+  },
+
   // 错误处理
   handleError(err) {
     logger.error('操作失败:', err);
@@ -26,7 +133,7 @@ const tools = {
       return `HTTP Error: ${err.response.status}\n` +
         `Error Message: ${JSON.stringify(err.response.data)}`;
     }
-    return '操作发生未知错误，请稍后再试！';
+    return '❌️ 操作发生未知错误，请稍后再试！';
   },
 
   // 生成回复消息
@@ -35,11 +142,11 @@ const tools = {
       case 'list':
         const bbList = data.map((item, index) =>
           `${index + 1}. ${item.get('content')}`).join('\n');
-        return `最近 ${data.length} 条哔哔内容如下：\n---------------\n${bbList}`;
+        return `👀 最近 ${data.length} 条哔哔内容如下：\n---------------\n${bbList}`;
 
       case 'search':
         if (data.length === 0) {
-          return `「${extra}」没有匹配的结果`;
+          return `🔍️「${extra}」没有匹配的结果`;
         }
 
         if (data.length <= 10) {
@@ -51,7 +158,7 @@ const tools = {
             })
             .join('\n');
 
-          return `「${extra}」匹配到 ${data.length} 条结果，详情如下：\n---------------\n${searchList}`;
+          return `🔍️「${extra}」匹配到 ${data.length} 条结果，详情如下：\n---------------\n${searchList}`;
         } else {
           const searchList = data
             .sort((a, b) => b.get('createdAt') - a.get('createdAt'))
@@ -66,7 +173,7 @@ const tools = {
             })
             .join('\n');
 
-          return `「${extra}」匹配到 ${data.length} 条结果，详情如下（仅展示前 10 条）：\n---------------\n${searchList}`;
+          return `🔍️「${extra}」匹配到 ${data.length} 条结果，详情如下（仅展示前 10 条）：\n---------------\n${searchList}`;
         }
 
       default:
@@ -129,6 +236,7 @@ const tools = {
 
   // 获取微信 access_token
   async getAccessToken(appId, appSecret) {
+    const startTime = Date.now();
     if (Date.now() > this.token_expire_time) {
       try {
         const res = await axios.get(
@@ -136,8 +244,10 @@ const tools = {
         );
         this.access_token = res.data.access_token;
         this.token_expire_time = Date.now() + 7000 * 1000;
+        logger.perf('获取access_token完成', startTime);
       } catch (err) {
         logger.error('获取access_token失败:', err);
+        logger.perf('获取access_token失败', startTime);
         throw new Error('获取 access_token 出错！');
       }
     }
@@ -243,6 +353,7 @@ const tools = {
 
   // 上传媒体文件到 COS
   async uploadMediaToCos(bucket, region, cosPath, mediaId, fileSuffix) {
+    const startTime = Date.now();
     try {
       const access_token = await this.getAccessToken(config.WeChat.appId, config.WeChat.appSecret);
       const mediaUrl = `https://api.weixin.qq.com/cgi-bin/media/get?access_token=${access_token}&media_id=${mediaId}`;
@@ -274,12 +385,14 @@ const tools = {
             // 同样处理 URL 路径
             const url = `https://${config.SubDomain}.${config.SecondLevelDomain}.${config.TopDomain}/${cleanPath}/${fileName}`;
             logger.info('媒体文件上传成功: {0}', url);
+            logger.perf('上传媒体文件完成', startTime);
             resolve(url);
           }
         });
       });
     } catch (err) {
       logger.error('处理媒体文件失败:', err);
+      logger.perf('上传媒体文件失败', startTime);
       throw err;
     }
   },
@@ -382,6 +495,7 @@ const tools = {
 
   // 查询内容并生成JSON
   async queryContentByPage(bucket, region, cosPath, pageNum, pageSize, isRecursive = false) {
+    const startTime = Date.now();
     logger.info('开始查询内容分页');
     const query = new AV.Query('content');
     query.descending('createdAt');
@@ -440,8 +554,11 @@ const tools = {
         logger.info('生成单页 JSON 文件: bbtalk_page{0}.json', pageNum);
         await this.generateAndUploadJson(bucket, region, cosPath, pageNum, results, count);
       }
+
+      logger.perf('查询内容分页完成', startTime);
     } catch (err) {
       logger.error('查询内容分页失败:', err);
+      logger.perf('查询内容分页失败', startTime);
       throw err;
     }
   },
@@ -505,14 +622,24 @@ const tools = {
   // 删除媒体文件
   async deleteMediaFile(url) {
     try {
-      await TcbCOS.deleteObject({
-        Bucket: config.Tcb.Bucket,
-        Region: config.Tcb.Region,
-        Key: url.pathname
+      await new Promise((resolve, reject) => {
+        TcbCOS.deleteObject({
+          Bucket: config.Tcb.Bucket,
+          Region: config.Tcb.Region,
+          Key: url.pathname
+        }, (err, data) => {
+          if (err) {
+            logger.error('删除媒体文件失败:', err);
+            reject(err);
+          } else {
+            logger.info('删除媒体文件成功: {0}', url.pathname);
+            resolve(data);
+          }
+        });
       });
-      logger.info('删除媒体文件成功: {0}', url.pathname);
     } catch (err) {
-      logger.warn('删除媒体文件失败:', err);
+      logger.error('删除媒体文件失败:', err);
+      throw err; // 抛出错误，让上层处理
     }
   },
 
@@ -559,4 +686,5 @@ const tools = {
   }
 };
 
+tools.startStatusCleanup();
 module.exports = tools;
